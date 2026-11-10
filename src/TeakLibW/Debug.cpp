@@ -26,6 +26,7 @@ TeakLibException *lastError;
 std::mutex logMutex;
 
 HDU::HDU() : Log(nullptr) {
+#ifndef __ANDROID__
     char *base = SDL_GetBasePath();
     const char *file = "debug.txt";
     BUFFER_V<char> path(strlen(base) + strlen(file) + 1);
@@ -34,6 +35,9 @@ HDU::HDU() : Log(nullptr) {
     Log = fopen(path.data(), "w");
     // Log = stdout;
     SDL_free(base);
+#endif
+    // Android: this constructor runs while libmain.so is being loaded, before SDL knows the
+    // activity. The log file is opened in DoAppPath() instead.
 
     SDL_LogOutputFunction defaultOut;
     SDL_LogGetOutputFunction(&defaultOut, nullptr);
@@ -74,6 +78,11 @@ HDU::HDU() : Log(nullptr) {
 }
 
 HDU::~HDU() { Close(); }
+
+void HDU::Open(const char *path) {
+    Close();
+    Log = fopen(path, "w");
+}
 
 void HDU::Close() {
     if (Log != nullptr) {

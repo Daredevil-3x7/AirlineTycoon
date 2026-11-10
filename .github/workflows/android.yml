@@ -1,0 +1,101 @@
+# Builds the Android APK of the fan version (see android/README.md).
+# The APK contains no game data: players import their own Airline Tycoon Deluxe files.
+name: android apk
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "android" ]
+
+permissions:
+  contents: write
+
+env:
+  SDL_TAG: release-2.32.10
+  SDL_IMAGE_TAG: release-2.8.10
+  SDL_MIXER_TAG: release-2.8.1
+  SDL_TTF_TAG: release-2.24.0
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+
+    # The patched text resources (patch/*.res) are compiled by the game executable itself.
+    # That is not possible for the cross-compiled Android library, so build the Linux
+    # version first and take the files from there.
+    - name: Install Linux dependencies (host build)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libjansson-dev libsdl2-dev libsdl2-gfx-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-net-dev libsdl2-ttf-dev
+
+    - name: Host build (patched text resources)
+      run: |
+        cmake -B cmake-build -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -S .
+        cmake --build cmake-build --parallel "$(nproc)"
+
+    - name: Collect patched text resources
+      run: |
+        mkdir -p android/app/src/main/assets/patch
+        cp -v cmake-build/Release/patch/*.res android/app/src/main/assets/patch/
+        test -f android/app/src/main/assets/patch/modded_ger.res
+
+    - name: Fetch SDL sources
+      working-directory: android/app/jni
+      run: |
+        git clone --depth 1 --branch "$SDL_TAG" https://github.com/libsdl-org/SDL.git SDL
+        git clone --depth 1 --branch "$SDL_IMAGE_TAG" https://github.com/libsdl-org/SDL_image.git SDL_image
+        git clone --depth 1 --branch "$SDL_MIXER_TAG" https://github.com/libsdl-org/SDL_mixer.git SDL_mixer
+        git clone --depth 1 --branch "$SDL_TTF_TAG" https://github.com/libsdl-org/SDL_ttf.git SDL_ttf
+        git -C SDL_ttf submodule update --init --depth 1 external/freetype
+
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: 17
+
+    - uses: gradle/actions/setup-gradle@v4
+      with:
+        gradle-version: "8.9"
+
+    - name: Compute version
+      run: |
+        VERSION=$(grep -oP 'FILE_VERSION\s+\K\d+(,\s+\d+){2}' src/Res/resource.h | sed -E 's/[, ]+/./g')
+        echo "AT_VERSION_NAME=${VERSION}-android.${{ github.run_number }}" >> "$GITHUB_ENV"
+        echo "AT_VERSION_CODE=${{ github.run_number }}" >> "$GITHUB_ENV"
+        echo "AT_NDK_VERSION=$(sed -n 's/^Pkg.Revision *= *//p' "$ANDROID_NDK_LATEST_HOME/source.properties")" >> "$GITHUB_ENV"
+        echo "APK_NAME=AirlineTycoon-${VERSION}-android.${{ github.run_number }}.apk" >> "$GITHUB_ENV"
+
+    - name: Build APK
+      working-directory: android
+      run: gradle --no-daemon --stacktrace assembleRelease
+
+    - name: Rename APK
+      run: |
+        mkdir -p artifacts
+        cp android/app/build/outputs/apk/release/app-release.apk "artifacts/$APK_NAME"
+        ls -la artifacts
+
+    - name: Publish artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.APK_NAME }}
+        path: artifacts/${{ env.APK_NAME }}
+
+    # A release gives a plain download link that also works from the phone's browser
+    - name: Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: android-preview-${{ github.run_number }}
+        target_commitish: ${{ github.sha }}
+        name: Android preview ${{ env.AT_VERSION_NAME }}
+        prerelease: true
+        body: |
+          Android test build of the fan version. Contains no game data: on first start,
+          select a ZIP of your own Airline Tycoon Deluxe folder (GOG or Steam).
+          Controls: tap = click, long press or Back = right click, three-finger tap = keyboard.
+        files: artifacts/${{ env.APK_NAME }}

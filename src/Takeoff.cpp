@@ -109,7 +109,36 @@ SLONG gTimerCorrection = 0; // Is it necessary to adapt the local clock to the s
 char *UCharToReadableAnsi(const unsigned char *pData, unsigned uLen);
 unsigned char *ReadableAnsiToUChar(const char *pData, unsigned uLen);
 
+static int ATMain(int argc, char *argv[]);
+
+#ifdef __ANDROID__
+// SDL calls SDL_main on a Java thread whose stack is about 1 MB. The game was written for
+// desktop main threads (8 MB), so it runs on its own thread with a larger stack.
+struct ATMainArgs {
+    int argc;
+    char **argv;
+};
+
+static int ATMainThread(void *data) {
+    auto *args = static_cast<ATMainArgs *>(data);
+    return ATMain(args->argc, args->argv);
+}
+
 int main(int argc, char *argv[]) {
+    ATMainArgs args{argc, argv};
+    int result = 0;
+    SDL_Thread *thread = SDL_CreateThreadWithStackSize(ATMainThread, "ATMain", 16 * 1024 * 1024, &args);
+    if (thread == nullptr) {
+        return ATMain(argc, argv);
+    }
+    SDL_WaitThread(thread, &result);
+    return result;
+}
+#else
+int main(int argc, char *argv[]) { return ATMain(argc, argv); }
+#endif
+
+static int ATMain(int argc, char *argv[]) {
 
 #ifdef _DEBUG
     theApp.InitInstance(argc, argv);

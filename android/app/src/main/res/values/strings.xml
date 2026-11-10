@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Airline Tycoon CE</string>
+    <string name="import_title">Airline Tycoon Deluxe – Community Edition</string>
+    <string name="import_intro">This app contains only the fan-made game engine. It needs the data files of your own copy of Airline Tycoon Deluxe (GOG or Steam).\n\n1. On your computer, pack the game folder into a ZIP file.\n2. Copy the ZIP to this device.\n3. Select it below. About 400 MB of free space are required.</string>
+    <string name="import_pick">Select ZIP with game files</string>
+    <string name="import_running">Importing… %1$d files, %2$d MB</string>
+    <string name="import_done">Import finished. Starting the game…</string>
+    <string name="import_failed">Import failed: %1$s</string>
+    <string name="import_not_game">This ZIP does not contain the game files (folders gli, room, misc, data are missing).</string>
+    <string name="import_no_storage">The app storage is not available.</string>
+    <string name="import_manual">Alternative: copy the game folders with a computer to\n%1$s</string>
+</resources>

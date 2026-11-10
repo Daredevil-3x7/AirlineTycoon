@@ -9,6 +9,11 @@
 #include "Proto.h"
 
 #include <SDL_filesystem.h>
+#ifdef __ANDROID__
+#include <SDL_log.h>
+#include <SDL_system.h>
+#include <unistd.h>
+#endif
 #include <SDL_timer.h>
 
 #include <algorithm>
@@ -499,6 +504,22 @@ UWORD ConvertString2Date(char *String) {
 // Bestimmt den Pfad der Applikation:
 //--------------------------------------------------------------------------------------------
 void DoAppPath() {
+#ifdef __ANDROID__
+    // Android has no "folder of the executable". The game files are imported into the app's
+    // external files directory (Android/data/<package>/files), which is also writable.
+    const char *storage = SDL_AndroidGetExternalStoragePath();
+    if (storage == nullptr) {
+        storage = SDL_AndroidGetInternalStoragePath();
+    }
+    AppPath = CString(storage != nullptr ? storage : ".");
+    AppPath += "/";
+    if (chdir(AppPath.c_str()) != 0) {
+        SDL_Log("Could not change into %s", AppPath.c_str());
+    }
+    Hdu.Open((AppPath + CString("debug.txt")).c_str());
+    return;
+#endif
+
     // Vollen Programmnamen anfordern:
     char *buffer = SDL_GetBasePath();
 

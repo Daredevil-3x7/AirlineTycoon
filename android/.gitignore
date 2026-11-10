@@ -1,0 +1,12 @@
+.gradle/
+build/
+app/build/
+app/.cxx/
+local.properties
+# fetched at build time (see README.md)
+app/jni/SDL/
+app/jni/SDL_image/
+app/jni/SDL_mixer/
+app/jni/SDL_ttf/
+# compiled by a host build, copied in before packaging
+app/src/main/assets/patch/

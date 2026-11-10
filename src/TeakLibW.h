@@ -993,6 +993,7 @@ class HDU {
     ~HDU();
 
     void Close();
+    void Open(const char *path); // (re)opens the log file, for platforms without a base path at startup
     void HercPrintfMsg(SDL_LogPriority lvl, const char *origin, const char *format, ...);
 
   private:

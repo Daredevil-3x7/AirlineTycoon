@@ -32,7 +32,7 @@ elseif(UNIX)
     target_compile_options(common INTERFACE "-Wno-sign-compare")
     target_compile_options(common INTERFACE "-Wno-type-limits")
     target_compile_options(common INTERFACE "-Wno-unused-result")
-    if(NOT APPLE)
+    if(NOT APPLE AND NOT ANDROID)
         target_compile_options(common INTERFACE "-Werror")
 
         target_compile_options(common INTERFACE "-Wdisabled-optimization")
@@ -52,7 +52,7 @@ add_subdirectory (SSE)
 include_directories(${PROJECT_SOURCE_DIR})
 
 # Add source to this project's executable.
-add_executable (AT
+set(AT_SOURCES
     Buero.cpp
     City.cpp
     DataTabl.cpp
@@ -145,6 +145,15 @@ add_executable (AT
     Res/Script2.rc
 )
 
+if(ANDROID)
+    # SDL's Java activity loads the game as libmain.so
+    add_library(AT SHARED ${AT_SOURCES})
+    set_target_properties(AT PROPERTIES OUTPUT_NAME main)
+    target_link_libraries(AT PRIVATE log android)
+else()
+    add_executable(AT ${AT_SOURCES})
+endif()
+
 set_target_properties(AT PROPERTIES
                       RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE}")
 
@@ -218,7 +227,7 @@ if (WIN32)
 endif()
 
 # Does our src folder contains a "gamefiles" folder ? Copy it.
-if(EXISTS ${GAMEFILES_FOLDER} AND CMAKE_BUILD_TYPE STREQUAL "Debug")
+if(EXISTS ${GAMEFILES_FOLDER} AND CMAKE_BUILD_TYPE STREQUAL "Debug" AND NOT ANDROID)
     add_custom_command(
         TARGET AT PRE_LINK
         COMMENT "Copying gamefiles to ${CMAKE_BUILD_TYPE} directory"
@@ -226,6 +235,9 @@ if(EXISTS ${GAMEFILES_FOLDER} AND CMAKE_BUILD_TYPE STREQUAL "Debug")
     )
 endif()
 
+# The patched assets are compiled by running the game itself, which is not possible when
+# cross-compiling. The Android build takes them from a host build (see android/README.md).
+if(NOT ANDROID)
 # Copy patched assets into target
 add_custom_command(
     TARGET AT POST_BUILD
@@ -249,3 +261,4 @@ install(FILES "${PROJECT_SOURCE_DIR}/../scripts/concat.py" DESTINATION "${PROJEC
 install(FILES "${PROJECT_SOURCE_DIR}/../scripts/threadpool.rb" DESTINATION "${PROJECT_INSTALL_DIR}/")
 install(FILES "${PROJECT_SOURCE_DIR}/../scripts/threadpool_missions.rb" DESTINATION "${PROJECT_INSTALL_DIR}/")
 install(FILES "${PROJECT_SOURCE_DIR}/../scripts/compare_paired.py" DESTINATION "${PROJECT_INSTALL_DIR}/")
+endif()

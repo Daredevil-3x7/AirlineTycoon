@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="import_intro">Diese App enthält nur die von Fans weiterentwickelte Spiel-Engine. Sie braucht die Spieldateien deiner eigenen Kopie von Airline Tycoon Deluxe (GOG oder Steam).\n\n1. Packe den Spielordner am Computer in eine ZIP-Datei.\n2. Kopiere die ZIP auf dieses Gerät.\n3. Wähle sie unten aus. Es werden etwa 400 MB freier Speicher benötigt.</string>
+    <string name="import_pick">ZIP mit Spieldateien auswählen</string>
+    <string name="import_running">Importiere… %1$d Dateien, %2$d MB</string>
+    <string name="import_done">Import abgeschlossen. Das Spiel startet…</string>
+    <string name="import_failed">Import fehlgeschlagen: %1$s</string>
+    <string name="import_not_game">Diese ZIP enthält keine Spieldateien (die Ordner gli, room, misc, data fehlen).</string>
+    <string name="import_no_storage">Der App-Speicher ist nicht verfügbar.</string>
+    <string name="import_manual">Alternative: Kopiere die Spielordner mit einem Computer nach\n%1$s</string>
+</resources>
