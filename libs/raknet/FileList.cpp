@@ -15,7 +15,7 @@
 #include <stdio.h> // RAKNET_DEBUG_PRINTF
 #include "RakAssert.h"
 #if defined(ANDROID)
-#include <asm/io.h>
+// <asm/io.h> does not exist in current NDKs and nothing from it is used
 #elif defined(_WIN32) || defined(__CYGWIN__)
 #include <io.h>
 
