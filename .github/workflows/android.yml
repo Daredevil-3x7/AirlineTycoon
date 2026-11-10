@@ -52,6 +52,8 @@ jobs:
         git clone --depth 1 --branch "$SDL_MIXER_TAG" https://github.com/libsdl-org/SDL_mixer.git SDL_mixer
         git clone --depth 1 --branch "$SDL_TTF_TAG" https://github.com/libsdl-org/SDL_ttf.git SDL_ttf
         git -C SDL_ttf submodule update --init --depth 1 external/freetype
+        # only SDL's sources and Java classes are used, not its sample Gradle project
+        rm -rf SDL/android-project/gradle SDL/android-project/gradlew SDL/android-project/gradlew.bat
 
     - uses: actions/setup-java@v4
       with:
