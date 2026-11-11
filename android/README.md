@@ -22,8 +22,10 @@ Savegames, settings (`AT.json`) and the log (`debug.txt`) are stored in the same
 | --- | --- |
 | Tap | Left click |
 | Double tap | Double click |
-| Drag | Hold the left button and move |
-| Long press, two-finger tap or Back button | Right click (leave room, close menu) |
+| Swipe (move right away) | Hold the left button and move |
+| Hold, then move if you like | Only moves the cursor: read flight orders and tooltips, scroll the airport on its arrows. Nothing is clicked. |
+| Two-finger tap, Back button or the arrow button | Right click (leave room, close menu) |
+| Tap twice on a room's exit strip | Leave the room (a single tap there does nothing) |
 | Three-finger tap | Show / hide the keyboard (it opens by itself for savegame and player names) |
 | Pinch with two fingers | Zoom in and out; drag with two fingers to move the zoomed picture |
 

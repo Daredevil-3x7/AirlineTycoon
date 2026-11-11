@@ -201,9 +201,10 @@ void ApplyView() {
 // Touch input (Android). The game expects a mouse with two buttons:
 //   tap                -> left click
 //   double tap         -> double click
-//   drag               -> left button held while moving
-//   long press         -> right click (leaves rooms, closes menus, removes entries)
-//   two-finger tap     -> right click
+//   swipe              -> left button held while moving (the finger has to move right away)
+//   hold               -> only moves the cursor: shows what the game displays when the mouse
+//                         rests on something (flight orders, tooltips), without clicking
+//   two-finger tap     -> right click (leaves rooms, closes menus, removes entries)
 //   three-finger tap   -> show / hide the on-screen keyboard
 //   Back button        -> right click at the last position
 //   two-finger pinch   -> zoom the picture, two-finger drag moves it while zoomed
@@ -215,7 +216,9 @@ void ApplyView() {
 // at its position for a moment.
 //--------------------------------------------------------------------------------------------
 namespace {
-constexpr Uint32 kLongPressMs = 600;
+constexpr Uint32 kPeekMs = 350;        // a finger resting this long looks instead of clicking
+constexpr Uint32 kSwipeStartMs = 250;  // a drag has to begin within this time
+constexpr Uint32 kExitConfirmMs = 1500; // second tap on a room's exit area within this time
 constexpr Uint32 kDoubleTapMs = 400;
 constexpr Uint32 kHoverMs = 70;     // cursor rests this long before the button goes down
 constexpr Uint32 kClickHoldMs = 70; // button stays down this long
@@ -238,6 +241,8 @@ struct TouchState {
     bool dragging{false};
     bool consumed{false};
     bool multi{false};
+    bool peek{false};           // looking only: no click when the finger is lifted
+    Uint32 exitTapTime{0};      // first tap on a room's exit area
     SLONG startX{0}, startY{0}; // window pixels
     SLONG lastX{0}, lastY{0};
     Uint32 downTime{0};
@@ -614,12 +619,37 @@ void TouchEnqueue(TouchAction action, SLONG x, SLONG y, Uint32 delay) {
     gTouch.queue.push_back(TouchPending{action, x, y, delay});
 }
 
+// Many rooms are left by a click on a wide strip at their edge. With a finger that happens by
+// accident next to the things one wants to tap, so such a click needs a second tap.
+// Returns false if the click (front of the queue, already removed) must not be sent.
+bool TouchAllowClick(TouchPending &p) {
+    if (p.action != TouchAction::LeftDown && p.action != TouchAction::LeftDblClk) {
+        return true;
+    }
+    if (::MouseLook != CURSOR_EXIT || ::MouseClickId != 999) {
+        return true;
+    }
+    const Uint32 now = SDL_GetTicks();
+    if (gTouch.exitTapTime != 0 && now - gTouch.exitTapTime <= kExitConfirmMs) {
+        gTouch.exitTapTime = 0;
+        p.action = TouchAction::LeftDown;
+        return true;
+    }
+    gTouch.exitTapTime = now;
+    if (!gTouch.queue.empty() && gTouch.queue.front().action == TouchAction::LeftUp) {
+        gTouch.queue.pop_front(); // the release that belongs to it
+    }
+    return false;
+}
+
 // Sends everything that is still waiting, in order and without further delay
 void TouchFlushQueue() {
     while (!gTouch.queue.empty()) {
-        const TouchPending p = gTouch.queue.front();
+        TouchPending p = gTouch.queue.front();
         gTouch.queue.pop_front();
-        TouchSendButton(p.action, p.x, p.y);
+        if (TouchAllowClick(p)) {
+            TouchSendButton(p.action, p.x, p.y);
+        }
     }
 }
 
@@ -629,9 +659,11 @@ void TouchRunQueue() {
         if (!SDL_TICKS_PASSED(now, gTouch.queueReadyAt) || gTouch.pumps - gTouch.queuePumpMark < kMinPumps) {
             return;
         }
-        const TouchPending p = gTouch.queue.front();
+        TouchPending p = gTouch.queue.front();
         gTouch.queue.pop_front();
-        TouchSendButton(p.action, p.x, p.y);
+        if (TouchAllowClick(p)) {
+            TouchSendButton(p.action, p.x, p.y);
+        }
         if (!gTouch.queue.empty()) {
             gTouch.queueReadyAt = SDL_GetTicks() + gTouch.queue.front().delay;
             gTouch.queuePumpMark = gTouch.pumps;
@@ -687,12 +719,10 @@ void TouchTick() {
     }
 
     const Uint32 now = SDL_GetTicks();
-    if (gTouch.active && !gTouch.dragging && !gTouch.consumed && !gTouch.multi && now - gTouch.downTime >= kLongPressMs) {
-        gTouch.consumed = true;
-        // Resting a finger on a scroll arrow scrolls the airport; a right click would jump back
-        if (!TouchOnScrollArrow()) {
-            TouchRightClick(gTouch.lastX, gTouch.lastY);
-        }
+    if (gTouch.active && !gTouch.dragging && !gTouch.consumed && !gTouch.multi && now - gTouch.downTime >= kPeekMs) {
+        // A resting finger looks: flight orders and tooltips can be read, the airport scrolls
+        // on its arrows, and nothing is clicked when the finger is lifted
+        gTouch.peek = true;
     }
 
     // A mouse would be moved away again; without a finger the cursor has to leave the arrow by itself
@@ -779,6 +809,7 @@ bool TouchHandleEvent(const SDL_Event &eventIn) {
             gTouch.consumed = false;
             gTouch.multi = false;
             gTouch.pinching = false;
+            gTouch.peek = false;
             gTouch.startX = gTouch.lastX = x;
             gTouch.startY = gTouch.lastY = y;
             gTouch.downTime = SDL_GetTicks();
@@ -828,7 +859,15 @@ bool TouchHandleEvent(const SDL_Event &eventIn) {
         gTouch.lastX = x;
         gTouch.lastY = y;
         const SLONG slop = kDragDistance * h / 480;
-        if (!gTouch.dragging && (abs(x - gTouch.startX) > slop || abs(y - gTouch.startY) > slop)) {
+        const bool moved = (abs(x - gTouch.startX) > slop || abs(y - gTouch.startY) > slop);
+        if (!gTouch.dragging && !gTouch.peek && moved && SDL_GetTicks() - gTouch.downTime > kSwipeStartMs) {
+            gTouch.peek = true; // moved off slowly: looking around, not dragging
+        }
+        if (gTouch.peek) {
+            TouchSendMotion(x, y);
+            return true;
+        }
+        if (!gTouch.dragging && moved) {
             gTouch.dragging = true;
             TouchFlushQueue();
             TouchSendMotion(gTouch.startX, gTouch.startY);
@@ -845,8 +884,8 @@ bool TouchHandleEvent(const SDL_Event &eventIn) {
             if (gTouch.dragging) {
                 TouchSendMotion(x, y);
                 TouchSendButton(TouchAction::LeftUp, x, y);
-            } else if (gTouch.consumed) {
-                // long press or keyboard gesture, already handled
+            } else if (gTouch.consumed || gTouch.peek) {
+                // zoom or keyboard gesture, or the finger was only looking
             } else if (gTouch.multi) {
                 TouchRightClick(gTouch.startX, gTouch.startY);
             } else {
