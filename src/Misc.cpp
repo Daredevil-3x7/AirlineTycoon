@@ -18,6 +18,9 @@
 
 #include <algorithm>
 #include <cassert>
+#include <fstream>
+#include <string>
+#include <vector>
 #include <chrono>
 #include <cmath>
 #include <locale>
@@ -1041,6 +1044,61 @@ void HEADLINES::AddOverride(SLONG Newspaper, const CString &HeadlineText, __int6
             Override[c].PictureId = PictureId;
             Override[c].PicturePriority = PicturePriority;
             break;
+        }
+    }
+}
+
+//--------------------------------------------------------------------------------------------
+// Adds real-world headlines to the newspapers, if the file "news.txt" exists in the game folder
+// (one headline per line, ISO-8859-1). They are decoration only: they do not count as
+// "interesting news" and only fill free lines of a paper.
+//--------------------------------------------------------------------------------------------
+void HEADLINES::AddRealNews() {
+    if (Sim.bNetwork != 0) {
+        return;
+    }
+
+    std::ifstream file((AppPath + CString("news.txt")).c_str());
+    if (!file.is_open()) {
+        return;
+    }
+
+    std::vector<std::string> lines;
+    std::string line;
+    while (std::getline(file, line)) {
+        while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) {
+            line.pop_back();
+        }
+        if (line.size() >= 8 && line.size() <= 120) {
+            lines.push_back(line);
+        }
+    }
+    if (lines.empty()) {
+        return;
+    }
+
+    const SLONG count = static_cast<SLONG>(lines.size());
+    SLONG next = (Sim.Date * 5) % count; // other headlines every day
+
+    for (SLONG paper = 0; paper < 3; paper++) {
+        SLONG used = 0;
+        for (SLONG d = 0; d < 10; d++) {
+            if (!Headline[paper * 10 + d].Headline.IsEmpty()) {
+                used++;
+            }
+        }
+        for (SLONG k = 0; k < 2 && used < 4; k++) {
+            for (SLONG d = 0; d < 10; d++) {
+                CHeadline &slot = Headline[paper * 10 + d];
+                if (slot.Headline.IsEmpty()) {
+                    slot.Headline = lines[next % count].c_str();
+                    slot.PictureId = 0;
+                    slot.PicturePriority = 0;
+                    used++;
+                    break;
+                }
+            }
+            next++;
         }
     }
 }

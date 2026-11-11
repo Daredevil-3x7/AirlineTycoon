@@ -12,5 +12,16 @@
     <string name="import_manual">Alternative: copy the game folders with a computer to\n%1$s</string>
     <string name="language_button">Game language: %1$s</string>
     <string name="language_title">Game language (takes effect at the next start of the game)</string>
-    <string name="shortcut_language">Language</string>
+    <string name="shortcut_settings">Settings</string>
+    <string name="settings_intro">Settings of the Android version. Changes take effect at the next start of the game.</string>
+    <string name="settings_start">Start game</string>
+    <string name="import_pick_again">Import game files again (ZIP)</string>
+    <string name="news_on">Real headlines in the kiosk: on (tagesschau.de / BBC News)</string>
+    <string name="news_off">Real headlines in the kiosk: off</string>
+    <string name="saves_export">Export savegames (ZIP)</string>
+    <string name="saves_import">Import savegames (ZIP)</string>
+    <string name="saves_exported">%1$d savegame files exported.</string>
+    <string name="saves_imported">%1$d savegame files imported.</string>
+    <string name="saves_none">There are no savegames yet.</string>
+    <string name="saves_none_in_zip">This ZIP contains no savegames.</string>
 </resources>

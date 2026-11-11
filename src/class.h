@@ -1037,6 +1037,7 @@ class /**/ HEADLINES {
     void ComparisonHeadlines(void);
     void ReInit(const CString &TabFilename);
     void AddOverride(SLONG Newspaper, const CString &Headlinetext, __int64 Pictureid, SLONG PicturePriority);
+    void AddRealNews(void); // optional headlines from "news.txt" (written by the Android launcher)
     void SortByPriority(void);
 
     friend class SIM;

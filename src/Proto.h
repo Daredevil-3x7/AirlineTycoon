@@ -38,6 +38,8 @@ void LoadLBMPalette(const char *Filename, SDL_Color *Palette);
 // GameFrame.Cpp:
 //--------------------------------------------------------------------------------------------
 void MessagePump(void);
+extern bool gMainLoopPump; // MessagePump() is being called by the main loop, not from inside a room or a loading screen
+void AtSaveOnBackground(void);
 void AtSetTextEntry(SLONG source, bool wanted); // Android: on-screen keyboard while a text field is active
 void SetToolTip(SLONG TipId, XY Pos);
 void SetMouseLook(SLONG Look, SLONG TipId, SLONG ClickArea, SLONG ClickId, SLONG ClickPar1 = 0, SLONG ClickPar2 = 0);

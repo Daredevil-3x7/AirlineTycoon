@@ -28,17 +28,25 @@ Savegames, settings (`AT.json`) and the log (`debug.txt`) are stored in the same
 | Pinch with two fingers | Zoom in and out; drag with two fingers to move the zoomed picture |
 
 On wide screens the picture is shown 20% wider than 4:3, and the bars beside it hold buttons:
-menu (Esc), pause and keyboard on the left; faster, slower and right click on the right.
+menu (Esc), pause, keyboard and zoom on the left; faster, slower and right click on the right.
 
-The game language follows the device language. To change it, long-press the app icon and
-choose "Language" (takes effect at the next start of the game).
+## Settings
 
-A mouse and a keyboard connected to the device work as on the desktop.
+Long-press the app icon and choose "Settings":
+
+- Game language (follows the device language by default)
+- Real headlines in the kiosk: titles from the RSS feed of tagesschau.de (German) or BBC News
+  (other languages) are added to free lines of the newspapers. This is the only use of the
+  network and can be switched off.
+- Export and import of savegames as a ZIP
+
+The game is saved to the autosave slot whenever the app goes to the background, because
+Android may end background apps at any time.
 
 ## Limitations
 
 - Music: only the OGG tracks play. MIDI is not available on Android.
-- Multiplayer is untested and the app has no network permission.
+- Multiplayer is untested.
 - Only 64-bit ARM devices (arm64-v8a), Android 7.0 or newer.
 
 ## Building

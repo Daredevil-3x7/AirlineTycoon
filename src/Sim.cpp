@@ -1178,6 +1178,7 @@ void SIM::ChooseStartup() {
     Headlines.ReloadHeadline();
     Headlines.InterpolateHeadline(); // Variablen ersetzen
     Headlines.ComparisonHeadlines(); // Variablen ersetzen
+    Headlines.AddRealNews();
     CreateRandomUsedPlanes();
 
     DumpAASeedSum(1002);
@@ -2502,6 +2503,7 @@ void SIM::NewDay() {
     Headlines.ReloadHeadline();
     Headlines.InterpolateHeadline();
     Headlines.SortByPriority();
+    Headlines.AddRealNews();
 
     // Gates, Cities und Routen versteigern:
     {

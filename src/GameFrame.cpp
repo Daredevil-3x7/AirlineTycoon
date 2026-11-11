@@ -249,7 +249,7 @@ struct TouchState {
     SLONG pressedButton{-1};
 } gTouch;
 
-enum TouchButtonAction { BtnMenu, BtnPause, BtnKeyboard, BtnFaster, BtnSlower, BtnBack };
+enum TouchButtonAction { BtnMenu, BtnPause, BtnKeyboard, BtnZoom, BtnFaster, BtnSlower, BtnBack };
 
 struct TouchButton {
     SDL_Rect rect;
@@ -333,8 +333,8 @@ std::vector<TouchButton> TouchLayoutButtons() {
     const ATView base = GetBaseView(w, h);
     const SLONG barLeft = base.x;
     const SLONG barRight = w - (base.x + base.w);
-    const TouchButtonAction left[3] = {BtnMenu, BtnPause, BtnKeyboard};
-    const TouchButtonAction right[3] = {BtnFaster, BtnSlower, BtnBack};
+    const std::vector<TouchButtonAction> left = {BtnMenu, BtnPause, BtnKeyboard, BtnZoom};
+    const std::vector<TouchButtonAction> right = {BtnFaster, BtnSlower, BtnBack};
 
     for (SLONG side = 0; side < 2; side++) {
         const SLONG barW = (side == 0) ? barLeft : barRight;
@@ -342,10 +342,12 @@ std::vector<TouchButton> TouchLayoutButtons() {
         if (barW < h / 8) {
             continue;
         }
+        const std::vector<TouchButtonAction> &actions = (side == 0) ? left : right;
+        const SLONG count = static_cast<SLONG>(actions.size());
         const SLONG size = std::min(barW * 3 / 4, h / 5);
-        for (SLONG i = 0; i < 3; i++) {
-            const SLONG cy = h * (2 * i + 1) / 6;
-            buttons.push_back(TouchButton{SDL_Rect{barX + (barW - size) / 2, cy - size / 2, size, size}, (side == 0) ? left[i] : right[i]});
+        for (SLONG i = 0; i < count; i++) {
+            const SLONG cy = h * (2 * i + 1) / (2 * count);
+            buttons.push_back(TouchButton{SDL_Rect{barX + (barW - size) / 2, cy - size / 2, size, size}, actions[i]});
         }
     }
     return buttons;
@@ -405,6 +407,17 @@ void TouchDrawOverlay(SDL_Renderer *renderer) {
             const SDL_Rect space{cx - 3 * u, cy + u, 6 * u, u};
             SDL_RenderFillRect(renderer, &space);
         } break;
+        case BtnZoom: { // magnifying glass: a lens with a plus and a handle
+            const SDL_Rect lens{cx - 4 * u, cy - 5 * u, 7 * u, 7 * u};
+            SDL_RenderDrawRect(renderer, &lens);
+            const SDL_Rect across{cx - 2 * u, cy - 2 * u, 3 * u, std::max(1, u / 2)};
+            const SDL_Rect down{cx - u, cy - 3 * u, std::max(1, u / 2), 3 * u};
+            SDL_RenderFillRect(renderer, &across);
+            SDL_RenderFillRect(renderer, &down);
+            for (SLONG k = 0; k < std::max(1, u); k++) {
+                SDL_RenderDrawLine(renderer, cx + 3 * u + k, cy + 2 * u, cx + 6 * u + k, cy + 5 * u);
+            }
+        } break;
         case BtnFaster: // fast forward
             TouchFillTriangle(renderer, cx, cy, 4 * u, 4 * u, 1);
             TouchFillTriangle(renderer, cx + 4 * u, cy, 4 * u, 4 * u, 1);
@@ -428,6 +441,7 @@ void TouchDrawOverlay(SDL_Renderer *renderer) {
 }
 
 void TouchRightClick(SLONG x, SLONG y);
+void TouchSetZoom(float zoom, float offX, float offY);
 
 void TouchPressButton(TouchButtonAction action) {
     switch (action) {
@@ -442,6 +456,24 @@ void TouchPressButton(TouchButtonAction action) {
             SDL_StopTextInput();
         } else {
             SDL_StartTextInput();
+        }
+        break;
+    case BtnZoom:
+        if (gViewZoom > 1.0f) {
+            TouchSetZoom(1.0f, 0.0f, 0.0f);
+        } else {
+            // twice as large, around the place that was touched last (or the middle)
+            SLONG w = 0;
+            SLONG h = 0;
+            TouchOutputSize(w, h);
+            const ATView base = GetBaseView(w, h);
+            SLONG px = gTouch.lastX - base.x;
+            SLONG py = gTouch.lastY - base.y;
+            if (gTouch.lastX == 0 && gTouch.lastY == 0) {
+                px = base.w / 2;
+                py = base.h / 2;
+            }
+            TouchSetZoom(2.0f, static_cast<float>(-px), static_cast<float>(-py));
         }
         break;
     case BtnFaster:
@@ -750,6 +782,9 @@ bool TouchHandleEvent(const SDL_Event &eventIn) {
     }
     case SDL_APP_WILLENTERBACKGROUND:
     case SDL_APP_DIDENTERFOREGROUND:
+        if (event.type == SDL_APP_WILLENTERBACKGROUND) {
+            AtSaveOnBackground();
+        }
         TouchFlushQueue();
         if (gTouch.dragging) {
             TouchSendButton(TouchAction::LeftUp, gTouch.lastX, gTouch.lastY);
@@ -777,6 +812,33 @@ bool TouchHandleEvent(const SDL_Event &eventIn) {
 }
 } // namespace
 #endif
+
+//--------------------------------------------------------------------------------------------
+// Mobile systems may end an app at any time while it is in the background. So the game is
+// saved to the autosave slot when the app is left (same switch as the daily autosave).
+//--------------------------------------------------------------------------------------------
+bool gMainLoopPump = false;
+
+void AtSaveOnBackground() {
+    if (!gMainLoopPump || Sim.bNetwork != 0 || Sim.Options.OptionAutosave == 0) {
+        return;
+    }
+    if ((Sim.Gamestate & 15) != GAMESTATE_PLAYING || TopWin != nullptr) {
+        return; // intro, menus, end of day
+    }
+    if (Sim.localPlayer < 0 || Sim.localPlayer >= Sim.Players.Players.AnzEntries()) {
+        return;
+    }
+    if (Sim.CallItADay != 0 || Sim.Time <= 9 * 60000 || Sim.Time >= 18 * 60000) {
+        return;
+    }
+    const CStdRaum *room = Sim.Players.Players[Sim.localPlayer].LocationWin;
+    if (room != nullptr && ((room->IsDialogOpen() != 0) || (room->MenuIsOpen() != 0))) {
+        return;
+    }
+
+    Sim.SaveGame(11, CString(StandardTexte.GetS(TOKEN_MISC, 5000)));
+}
 
 //--------------------------------------------------------------------------------------------
 // Rooms report whether one of their text fields is being edited (source: 0=options, 1=new game).

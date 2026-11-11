@@ -10,5 +10,16 @@
     <string name="import_manual">Alternative: Kopiere die Spielordner mit einem Computer nach\n%1$s</string>
     <string name="language_button">Spielsprache: %1$s</string>
     <string name="language_title">Spielsprache (gilt ab dem nächsten Start des Spiels)</string>
-    <string name="shortcut_language">Sprache</string>
+    <string name="shortcut_settings">Einstellungen</string>
+    <string name="settings_intro">Einstellungen der Android-Version. Änderungen gelten ab dem nächsten Start des Spiels.</string>
+    <string name="settings_start">Spiel starten</string>
+    <string name="import_pick_again">Spieldateien neu importieren (ZIP)</string>
+    <string name="news_on">Echte Schlagzeilen im Kiosk: an (tagesschau.de / BBC News)</string>
+    <string name="news_off">Echte Schlagzeilen im Kiosk: aus</string>
+    <string name="saves_export">Spielstände exportieren (ZIP)</string>
+    <string name="saves_import">Spielstände importieren (ZIP)</string>
+    <string name="saves_exported">%1$d Spielstand-Dateien exportiert.</string>
+    <string name="saves_imported">%1$d Spielstand-Dateien importiert.</string>
+    <string name="saves_none">Es gibt noch keine Spielstände.</string>
+    <string name="saves_none_in_zip">Diese ZIP enthält keine Spielstände.</string>
 </resources>

@@ -2385,7 +2385,9 @@ void CTakeOffApp::GameLoop(void * /*unused*/) {
           }
           }*/
 
+        gMainLoopPump = true;
         MessagePump();
+        gMainLoopPump = false;
     }
 
     if (bFullscreen != 0) {

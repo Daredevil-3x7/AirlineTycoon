@@ -551,6 +551,19 @@ SLONG SB_CPrimaryBitmap::Present() {
             Overlay(lpDD);
         }
 
+#ifdef __ANDROID__
+        // Phone displays often run at 90 or 120 Hz. The game is made for 60 pictures per second
+        // (some movements are counted per picture), and more would only cost battery.
+        {
+            static Uint32 lastPresent = 0;
+            const Uint32 elapsed = SDL_GetTicks() - lastPresent;
+            if (elapsed < 15) {
+                SDL_Delay(15 - elapsed);
+            }
+            lastPresent = SDL_GetTicks();
+        }
+#endif
+
         SDL_RenderPresent(lpDD);
     } else {
         if (SDL_UpdateWindowSurface(Window) < 0) {

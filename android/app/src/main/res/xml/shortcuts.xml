@@ -4,10 +4,10 @@
     <shortcut
         android:enabled="true"
         android:icon="@drawable/ic_launcher"
-        android:shortcutId="language"
-        android:shortcutShortLabel="@string/shortcut_language">
+        android:shortcutId="settings"
+        android:shortcutShortLabel="@string/shortcut_settings">
         <intent
-            android:action="io.github.daredevil3x7.airlinetycoon.LANGUAGE"
+            android:action="io.github.daredevil3x7.airlinetycoon.SETTINGS"
             android:targetClass="io.github.daredevil3x7.airlinetycoon.ImportActivity"
             android:targetPackage="io.github.daredevil3x7.airlinetycoon" />
     </shortcut>

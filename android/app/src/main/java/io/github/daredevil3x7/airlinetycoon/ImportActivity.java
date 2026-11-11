@@ -23,6 +23,7 @@ import android.widget.TextView;
 
 import java.io.BufferedInputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -35,20 +36,25 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+import java.util.zip.ZipOutputStream;
 
 /**
- * Start screen. The APK contains no game data: on first start the player selects a ZIP of
- * their own Airline Tycoon Deluxe installation, which is unpacked into the app's external
- * files directory (Android/data/&lt;package&gt;/files). After that the game starts directly.
+ * Start screen and settings. The APK contains no game data: on first start the player selects
+ * a ZIP of their own Airline Tycoon Deluxe installation, which is unpacked into the app's
+ * external files directory (Android/data/&lt;package&gt;/files). After that the game starts
+ * directly; the settings are reached through the app shortcut (long press on the app icon).
  */
 public class ImportActivity extends Activity {
     private static final String TAG = "ATImport";
     private static final int REQUEST_PICK_ZIP = 1;
-    /** Sent by the app shortcut (long press on the app icon). */
-    static final String ACTION_LANGUAGE = "io.github.daredevil3x7.airlinetycoon.LANGUAGE";
+    private static final int REQUEST_EXPORT_SAVES = 2;
+    private static final int REQUEST_IMPORT_SAVES = 3;
+    /** Sent by the app shortcut. */
+    static final String ACTION_SETTINGS = "io.github.daredevil3x7.airlinetycoon.SETTINGS";
 
     private static final String PREFS = "at";
     private static final String PREF_LANGUAGE = "language";
+    private static final String PREF_NEWS = "news";
     /** Names and the game's language numbers (LANGUAGE_... in defines.h). */
     private static final String[] LANGUAGE_NAMES =
             {"Deutsch", "English", "Français", "Polski", "Nederlands", "Italiano", "Español", "Português"};
@@ -60,14 +66,19 @@ public class ImportActivity extends Activity {
             new HashSet<>(Arrays.asList("data", "gli", "intro", "misc", "room", "sound", "video", "voice"));
     /** Without these the game cannot start. */
     private static final String[] REQUIRED_DIRS = {"data", "gli", "misc", "room"};
+    private static final String SAVE_DIR = "savegame";
 
     private final Handler ui = new Handler(Looper.getMainLooper());
     private File dataDir;
     private TextView status;
+    private Button startButton;
     private Button pickButton;
-    private ProgressBar progress;
     private Button languageButton;
-    private boolean importing;
+    private Button newsButton;
+    private Button exportButton;
+    private Button importButton;
+    private ProgressBar progress;
+    private boolean busy;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -76,19 +87,184 @@ public class ImportActivity extends Activity {
         buildUi();
 
         if (dataDir == null) {
-            pickButton.setEnabled(false);
+            setButtonsEnabled(false);
             status.setText(R.string.import_no_storage);
             return;
         }
-        if (ACTION_LANGUAGE.equals(getIntent().getAction())) {
-            chooseLanguage(true);
-        } else if (hasGameData(dataDir)) {
+        boolean settings = ACTION_SETTINGS.equals(getIntent().getAction());
+        if (!settings && hasGameData(dataDir)) {
             launchGame();
         }
     }
 
     // ---------------------------------------------------------------------------------------
-    // Language
+    // UI
+    // ---------------------------------------------------------------------------------------
+
+    private int dp(int value) {
+        return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, getResources().getDisplayMetrics());
+    }
+
+    private Button addButton(LinearLayout column, View.OnClickListener listener) {
+        Button button = new Button(this);
+        button.setOnClickListener(listener);
+        column.addView(button, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        return button;
+    }
+
+    private void buildUi() {
+        LinearLayout column = new LinearLayout(this);
+        column.setOrientation(LinearLayout.VERTICAL);
+        column.setGravity(Gravity.CENTER_HORIZONTAL);
+        column.setPadding(dp(24), dp(32), dp(24), dp(32));
+
+        TextView title = new TextView(this);
+        title.setText(R.string.import_title);
+        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
+        column.addView(title);
+
+        boolean hasData = hasGameData(dataDir);
+
+        TextView intro = new TextView(this);
+        intro.setText(hasData ? R.string.settings_intro : R.string.import_intro);
+        intro.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        intro.setPadding(0, dp(16), 0, dp(24));
+        column.addView(intro);
+
+        startButton = addButton(column, new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                launchGame();
+            }
+        });
+        startButton.setText(R.string.settings_start);
+        startButton.setVisibility(hasData ? View.VISIBLE : View.GONE);
+
+        pickButton = addButton(column, new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                pickDocument(REQUEST_PICK_ZIP);
+            }
+        });
+        pickButton.setText(hasData ? R.string.import_pick_again : R.string.import_pick);
+
+        languageButton = addButton(column, new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                chooseLanguage();
+            }
+        });
+
+        newsButton = addButton(column, new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+                prefs.edit().putBoolean(PREF_NEWS, !prefs.getBoolean(PREF_NEWS, true)).apply();
+                updateLabels();
+            }
+        });
+
+        exportButton = addButton(column, new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.setType("application/zip");
+                intent.putExtra(Intent.EXTRA_TITLE, "AirlineTycoon-savegames.zip");
+                startActivityForResult(intent, REQUEST_EXPORT_SAVES);
+            }
+        });
+        exportButton.setText(R.string.saves_export);
+        exportButton.setVisibility(hasData ? View.VISIBLE : View.GONE);
+
+        importButton = addButton(column, new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                pickDocument(REQUEST_IMPORT_SAVES);
+            }
+        });
+        importButton.setText(R.string.saves_import);
+        importButton.setVisibility(hasData ? View.VISIBLE : View.GONE);
+
+        progress = new ProgressBar(this);
+        progress.setIndeterminate(true);
+        progress.setVisibility(View.GONE);
+        progress.setPadding(0, dp(24), 0, 0);
+        column.addView(progress);
+
+        status = new TextView(this);
+        status.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        status.setPadding(0, dp(16), 0, 0);
+        if (dataDir != null) {
+            status.setText(getString(R.string.import_manual, dataDir.getAbsolutePath()));
+        }
+        column.addView(status);
+
+        updateLabels();
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(column);
+        setContentView(scroll);
+    }
+
+    private void updateLabels() {
+        languageButton.setText(getString(R.string.language_button, languageName()));
+        newsButton.setText(isNewsEnabled(this) ? R.string.news_on : R.string.news_off);
+    }
+
+    private void setButtonsEnabled(boolean enabled) {
+        for (Button button : new Button[] {startButton, pickButton, languageButton, newsButton, exportButton, importButton}) {
+            button.setEnabled(enabled);
+        }
+    }
+
+    private void setBusy(boolean nowBusy) {
+        busy = nowBusy;
+        setButtonsEnabled(!nowBusy);
+        progress.setVisibility(nowBusy ? View.VISIBLE : View.GONE);
+        if (nowBusy) {
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        } else {
+            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        }
+    }
+
+    private void pickDocument(int request) {
+        if (busy) {
+            return;
+        }
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        // Some file managers report ZIP files with a generic type, so do not filter too strictly
+        intent.setType("*/*");
+        intent.putExtra(Intent.EXTRA_MIME_TYPES,
+                new String[] {"application/zip", "application/x-zip-compressed", "application/octet-stream"});
+        startActivityForResult(intent, request);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (resultCode != RESULT_OK || data == null || data.getData() == null) {
+            return;
+        }
+        if (requestCode == REQUEST_PICK_ZIP) {
+            runTask(data.getData(), requestCode);
+        } else if (requestCode == REQUEST_EXPORT_SAVES || requestCode == REQUEST_IMPORT_SAVES) {
+            runTask(data.getData(), requestCode);
+        }
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (!busy) {
+            super.onBackPressed();
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Settings
     // ---------------------------------------------------------------------------------------
 
     /** The language number for the game: the player's choice, else the device language, else -1. */
@@ -106,6 +282,10 @@ public class ImportActivity extends Activity {
         return -1;
     }
 
+    static boolean isNewsEnabled(Context context) {
+        return context.getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_NEWS, true);
+    }
+
     private String languageName() {
         int language = getLanguage(this);
         for (int i = 0; i < LANGUAGE_IDS.length; i++) {
@@ -116,7 +296,7 @@ public class ImportActivity extends Activity {
         return LANGUAGE_NAMES[1];
     }
 
-    private void chooseLanguage(final boolean launchAfterwards) {
+    private void chooseLanguage() {
         int language = getLanguage(this);
         int checked = 1;
         for (int i = 0; i < LANGUAGE_IDS.length; i++) {
@@ -130,175 +310,91 @@ public class ImportActivity extends Activity {
                     @Override
                     public void onClick(DialogInterface dialog, int which) {
                         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(PREF_LANGUAGE, LANGUAGE_IDS[which]).apply();
-                        languageButton.setText(getString(R.string.language_button, languageName()));
+                        updateLabels();
                         dialog.dismiss();
-                    }
-                })
-                .setOnDismissListener(new DialogInterface.OnDismissListener() {
-                    @Override
-                    public void onDismiss(DialogInterface dialog) {
-                        if (launchAfterwards && hasGameData(dataDir)) {
-                            launchGame();
-                        }
                     }
                 })
                 .show();
     }
 
     // ---------------------------------------------------------------------------------------
-    // UI
+    // Background work: game data import, savegame export and import
     // ---------------------------------------------------------------------------------------
 
-    private int dp(int value) {
-        return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, getResources().getDisplayMetrics());
-    }
-
-    private void buildUi() {
-        LinearLayout column = new LinearLayout(this);
-        column.setOrientation(LinearLayout.VERTICAL);
-        column.setGravity(Gravity.CENTER_HORIZONTAL);
-        column.setPadding(dp(24), dp(32), dp(24), dp(32));
-
-        TextView title = new TextView(this);
-        title.setText(R.string.import_title);
-        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
-        column.addView(title);
-
-        TextView intro = new TextView(this);
-        intro.setText(R.string.import_intro);
-        intro.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
-        intro.setPadding(0, dp(16), 0, dp(24));
-        column.addView(intro);
-
-        pickButton = new Button(this);
-        pickButton.setText(R.string.import_pick);
-        pickButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                pickZip();
-            }
-        });
-        column.addView(pickButton);
-
-        languageButton = new Button(this);
-        languageButton.setText(getString(R.string.language_button, languageName()));
-        languageButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                chooseLanguage(false);
-            }
-        });
-        column.addView(languageButton);
-
-        progress = new ProgressBar(this);
-        progress.setIndeterminate(true);
-        progress.setVisibility(View.GONE);
-        progress.setPadding(0, dp(24), 0, 0);
-        column.addView(progress);
-
-        status = new TextView(this);
-        status.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-        status.setPadding(0, dp(16), 0, 0);
-        if (dataDir != null) {
-            status.setText(getString(R.string.import_manual, dataDir.getAbsolutePath()));
-        }
-        column.addView(status);
-
-        ScrollView scroll = new ScrollView(this);
-        scroll.addView(column);
-        setContentView(scroll);
-    }
-
-    private void pickZip() {
-        if (importing) {
-            return;
-        }
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
-        // Some file managers report ZIP files with a generic type, so do not filter too strictly
-        intent.setType("*/*");
-        intent.putExtra(Intent.EXTRA_MIME_TYPES,
-                new String[] {"application/zip", "application/x-zip-compressed", "application/octet-stream"});
-        startActivityForResult(intent, REQUEST_PICK_ZIP);
-    }
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == REQUEST_PICK_ZIP && resultCode == RESULT_OK && data != null && data.getData() != null) {
-            startImport(data.getData());
-        }
-    }
-
-    @Override
-    public void onBackPressed() {
-        if (!importing) {
-            super.onBackPressed();
-        }
-    }
-
-    // ---------------------------------------------------------------------------------------
-    // Import
-    // ---------------------------------------------------------------------------------------
-
-    private void startImport(final Uri zip) {
-        importing = true;
-        pickButton.setEnabled(false);
-        progress.setVisibility(View.VISIBLE);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+    private void runTask(final Uri uri, final int request) {
+        setBusy(true);
         status.setText(getString(R.string.import_running, 0, 0));
 
         new Thread(new Runnable() {
             @Override
             public void run() {
-                String error = null;
+                String message;
+                boolean ok = false;
                 try {
-                    unzip(zip);
-                    if (!hasGameData(dataDir)) {
-                        error = getString(R.string.import_not_game);
+                    if (request == REQUEST_PICK_ZIP) {
+                        unzipGameData(uri);
+                        ok = hasGameData(dataDir);
+                        message = getString(ok ? R.string.import_done : R.string.import_not_game);
+                    } else if (request == REQUEST_EXPORT_SAVES) {
+                        int count = exportSaves(uri);
+                        ok = count > 0;
+                        message = ok ? getString(R.string.saves_exported, count) : getString(R.string.saves_none);
+                    } else {
+                        int count = importSaves(uri);
+                        ok = count > 0;
+                        message = ok ? getString(R.string.saves_imported, count) : getString(R.string.saves_none_in_zip);
                     }
                 } catch (Exception e) {
-                    Log.e(TAG, "Import failed", e);
-                    error = getString(R.string.import_failed, String.valueOf(e.getMessage()));
+                    Log.e(TAG, "Task failed", e);
+                    message = getString(R.string.import_failed, String.valueOf(e.getMessage()));
                 }
-                final String result = error;
+                final String text = message;
+                final boolean launch = ok && request == REQUEST_PICK_ZIP;
                 ui.post(new Runnable() {
                     @Override
                     public void run() {
-                        importFinished(result);
+                        setBusy(false);
+                        status.setText(text);
+                        if (launch) {
+                            launchGame();
+                        }
                     }
                 });
             }
         }, "ATImport").start();
     }
 
-    private void importFinished(String error) {
-        importing = false;
-        progress.setVisibility(View.GONE);
-        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        if (error != null) {
-            pickButton.setEnabled(true);
-            status.setText(error);
-            return;
+    private InputStream open(Uri uri) throws IOException {
+        InputStream raw = getContentResolver().openInputStream(uri);
+        if (raw == null) {
+            throw new IOException("cannot open file");
         }
-        status.setText(R.string.import_done);
-        launchGame();
+        return new BufferedInputStream(raw, 1 << 16);
     }
 
-    private void unzip(Uri zip) throws IOException {
+    private static Charset zipCharset() {
         // ZIPs made by Windows store non-ASCII names in the OEM code page. Entries flagged as
-        // UTF-8 are still decoded as UTF-8, whatever charset is passed here.
-        Charset charset = Charset.isSupported("IBM437") ? Charset.forName("IBM437") : StandardCharsets.UTF_8;
+        // UTF-8 are still decoded as UTF-8, whatever charset is passed.
+        return Charset.isSupported("IBM437") ? Charset.forName("IBM437") : StandardCharsets.UTF_8;
+    }
+
+    private static long copy(InputStream in, OutputStream out, byte[] buffer) throws IOException {
+        long total = 0;
+        int n;
+        while ((n = in.read(buffer)) > 0) {
+            out.write(buffer, 0, n);
+            total += n;
+        }
+        return total;
+    }
+
+    private void unzipGameData(Uri zip) throws IOException {
         String root = dataDir.getCanonicalPath() + File.separator;
         byte[] buffer = new byte[1 << 16];
         int files = 0;
         long bytes = 0;
 
-        InputStream raw = getContentResolver().openInputStream(zip);
-        if (raw == null) {
-            throw new IOException("cannot open file");
-        }
-        try (ZipInputStream in = new ZipInputStream(new BufferedInputStream(raw, 1 << 16), charset)) {
+        try (ZipInputStream in = new ZipInputStream(open(zip), zipCharset())) {
             ZipEntry entry;
             while ((entry = in.getNextEntry()) != null) {
                 String relative = entry.isDirectory() ? null : mapEntry(entry.getName());
@@ -314,11 +410,7 @@ public class ImportActivity extends Activity {
                     throw new IOException("cannot create " + parent);
                 }
                 try (OutputStream out = new FileOutputStream(target)) {
-                    int n;
-                    while ((n = in.read(buffer)) > 0) {
-                        out.write(buffer, 0, n);
-                        bytes += n;
-                    }
+                    bytes += copy(in, out, buffer);
                 }
                 files++;
                 if (files % 20 == 0) {
@@ -333,7 +425,7 @@ public class ImportActivity extends Activity {
         ui.post(new Runnable() {
             @Override
             public void run() {
-                if (importing) {
+                if (busy) {
                     status.setText(getString(R.string.import_running, files, (int) (bytes >> 20)));
                 }
             }
@@ -373,6 +465,67 @@ public class ImportActivity extends Activity {
         return path.toString();
     }
 
+    /** Packs all files of the savegame folder into the chosen document. */
+    private int exportSaves(Uri target) throws IOException {
+        File dir = findIgnoreCase(dataDir, SAVE_DIR);
+        File[] files = dir != null ? dir.listFiles() : null;
+        if (files == null || files.length == 0) {
+            return 0;
+        }
+        OutputStream raw = getContentResolver().openOutputStream(target);
+        if (raw == null) {
+            throw new IOException("cannot write file");
+        }
+        byte[] buffer = new byte[1 << 16];
+        int count = 0;
+        try (ZipOutputStream out = new ZipOutputStream(raw)) {
+            for (File file : files) {
+                if (!file.isFile()) {
+                    continue;
+                }
+                out.putNextEntry(new ZipEntry(SAVE_DIR + "/" + file.getName()));
+                try (InputStream in = new FileInputStream(file)) {
+                    copy(in, out, buffer);
+                }
+                out.closeEntry();
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /** Unpacks savegames (files inside a "savegame" folder of the ZIP) into the game's savegame folder. */
+    private int importSaves(Uri zip) throws IOException {
+        File dir = findIgnoreCase(dataDir, SAVE_DIR);
+        if (dir == null) {
+            dir = new File(dataDir, SAVE_DIR);
+        }
+        if (!dir.isDirectory() && !dir.mkdirs()) {
+            throw new IOException("cannot create " + dir);
+        }
+        byte[] buffer = new byte[1 << 16];
+        int count = 0;
+        try (ZipInputStream in = new ZipInputStream(open(zip), zipCharset())) {
+            ZipEntry entry;
+            while ((entry = in.getNextEntry()) != null) {
+                if (entry.isDirectory()) {
+                    continue;
+                }
+                String[] parts = entry.getName().replace('\\', '/').split("/");
+                String name = parts[parts.length - 1];
+                boolean inSaveDir = parts.length >= 2 && parts[parts.length - 2].equalsIgnoreCase(SAVE_DIR);
+                if (!inSaveDir || !name.matches("[A-Za-z0-9_.-]+") || name.startsWith(".")) {
+                    continue;
+                }
+                try (OutputStream out = new FileOutputStream(new File(dir, name))) {
+                    copy(in, out, buffer);
+                }
+                count++;
+            }
+        }
+        return count;
+    }
+
     // ---------------------------------------------------------------------------------------
     // Game start
     // ---------------------------------------------------------------------------------------
@@ -392,7 +545,7 @@ public class ImportActivity extends Activity {
     }
 
     private static File findIgnoreCase(File dir, String name) {
-        File[] children = dir.listFiles();
+        File[] children = dir != null ? dir.listFiles() : null;
         if (children != null) {
             for (File child : children) {
                 if (child.getName().equalsIgnoreCase(name)) {
@@ -417,15 +570,15 @@ public class ImportActivity extends Activity {
         for (String name : names) {
             try (InputStream in = getAssets().open("patch/" + name);
                  OutputStream out = new FileOutputStream(new File(patchDir, name))) {
-                int n;
-                while ((n = in.read(buffer)) > 0) {
-                    out.write(buffer, 0, n);
-                }
+                copy(in, out, buffer);
             }
         }
     }
 
     private void launchGame() {
+        if (!hasGameData(dataDir)) {
+            return;
+        }
         try {
             copyPatchFiles();
         } catch (IOException e) {
@@ -433,6 +586,8 @@ public class ImportActivity extends Activity {
             status.setText(getString(R.string.import_failed, String.valueOf(e.getMessage())));
             return;
         }
+        // headlines for the kiosk; the game reads them at the start of each game day
+        NewsFetcher.refreshAsync(dataDir, getLanguage(this), isNewsEnabled(this));
         startActivity(new Intent(this, ATActivity.class));
         finish();
     }
