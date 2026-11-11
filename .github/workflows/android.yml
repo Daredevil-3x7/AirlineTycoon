@@ -29,10 +29,19 @@ jobs:
     # That is not possible for the cross-compiled Android library, so build the Linux
     # version first and take the files from there.
     - name: Install Linux dependencies (host build)
-      timeout-minutes: 8
+      timeout-minutes: 15
       run: |
-        sudo apt-get -o Acquire::Retries=3 update
-        sudo apt-get -o Acquire::Retries=3 install -y libjansson-dev libsdl2-dev libsdl2-gfx-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-net-dev libsdl2-ttf-dev
+        PACKAGES="libjansson-dev libsdl2-dev libsdl2-gfx-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-net-dev libsdl2-ttf-dev"
+        install() { sudo timeout 300 apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 install -y $PACKAGES; }
+        sudo timeout 120 apt-get update || true
+        if ! install; then
+          # the runner's default mirror sometimes stops answering
+          echo "Default mirror failed, switching to archive.ubuntu.com"
+          printf 'http://archive.ubuntu.com/ubuntu/\tpriority:1\n' | sudo tee /etc/apt/apt-mirrors.txt
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/*.sources /etc/apt/sources.list 2>/dev/null || true
+          sudo timeout 180 apt-get update
+          install
+        fi
 
     - name: Host build (patched text resources)
       run: |
