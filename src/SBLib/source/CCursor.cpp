@@ -43,8 +43,11 @@ SLONG SB_CCursor::Show(bool show) {
     return SDL_ShowCursor(!show ? SDL_ENABLE : SDL_DISABLE);
 }
 
+float gSBCursorScale = 1.0f;
+
 SLONG SB_CCursor::Render(SDL_Renderer *renderer) {
-    SDL_Rect dst = {Position.x, Position.y, Cursor->GetXSize(), Cursor->GetYSize()};
+    SDL_Rect dst = {Position.x, Position.y, static_cast<int>(static_cast<float>(Cursor->GetXSize()) * gSBCursorScale),
+                    static_cast<int>(static_cast<float>(Cursor->GetYSize()) * gSBCursorScale)};
     if (renderer != nullptr && Cursor->GetTexture() != nullptr) {
         return SDL_RenderCopy(renderer, Cursor->GetTexture(), nullptr, &dst);
     }

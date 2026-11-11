@@ -25,6 +25,13 @@ Savegames, settings (`AT.json`) and the log (`debug.txt`) are stored in the same
 | Drag | Hold the left button and move |
 | Long press, two-finger tap or Back button | Right click (leave room, close menu) |
 | Three-finger tap | Show / hide the keyboard (it opens by itself for savegame and player names) |
+| Pinch with two fingers | Zoom in and out; drag with two fingers to move the zoomed picture |
+
+On wide screens the picture is shown 20% wider than 4:3, and the bars beside it hold buttons:
+menu (Esc), pause and keyboard on the left; faster, slower and right click on the right.
+
+The game language follows the device language. To change it, long-press the app icon and
+choose "Language" (takes effect at the next start of the game).
 
 A mouse and a keyboard connected to the device work as on the desktop.
 

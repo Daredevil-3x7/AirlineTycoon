@@ -27,7 +27,10 @@
 #include <SDL_hints.h>
 
 #ifdef __ANDROID__
+#include <algorithm>
+#include <cmath>
 #include <deque>
+#include <vector>
 #endif
 
 extern SBNetwork gNetwork;
@@ -123,6 +126,60 @@ void CheatSound() {
     gUniversalFx.Play(0, Sim.Options.OptionEffekte * 100 / 7);
 }
 
+constexpr SLONG getAspectWidth(SLONG height) { return static_cast<SLONG>(static_cast<float>(height) * (640.0f / 480.0f)); }
+
+#ifdef __ANDROID__
+//--------------------------------------------------------------------------------------------
+// Where the 640x480 picture is shown on the screen (Android).
+// "Base" is the area the picture gets: full height and, to make everything a bit larger on wide
+// phone screens, 20% wider than 4:3. The bars left and right of it hold the touch buttons.
+// "View" is the picture itself, which a two-finger zoom can make larger than the base area.
+//--------------------------------------------------------------------------------------------
+struct ATView {
+    SLONG x, y, w, h;
+};
+
+namespace {
+constexpr float kWideStretch = 1.2f;
+constexpr float kMaxZoom = 3.0f;
+float gViewZoom = 1.0f;
+float gViewOffX = 0.0f; // of the picture's top left corner relative to the base area, <= 0
+float gViewOffY = 0.0f;
+
+ATView GetBaseView(SLONG screenW, SLONG screenH) {
+    if (Sim.Options.OptionKeepAspectRatio == 0) {
+        return ATView{0, 0, screenW, screenH};
+    }
+    const SLONG w = std::min(screenW, static_cast<SLONG>(static_cast<float>(getAspectWidth(screenH)) * kWideStretch));
+    return ATView{(screenW - w) / 2, 0, w, screenH};
+}
+
+ATView GetView(SLONG screenW, SLONG screenH) {
+    const ATView base = GetBaseView(screenW, screenH);
+    return ATView{base.x + static_cast<SLONG>(gViewOffX), base.y + static_cast<SLONG>(gViewOffY), static_cast<SLONG>(static_cast<float>(base.w) * gViewZoom),
+                  static_cast<SLONG>(static_cast<float>(base.h) * gViewZoom)};
+}
+
+void TouchDrawOverlay(SDL_Renderer *renderer);
+
+void ApplyView() {
+    SLONG screenW = 0;
+    SLONG screenH = 0;
+    SDL_GetRendererOutputSize(lpDD, &screenW, &screenH);
+    if (screenW <= 0 || screenH <= 0) {
+        return;
+    }
+    const ATView base = GetBaseView(screenW, screenH);
+    const ATView view = GetView(screenW, screenH);
+    const SDL_Rect clip{base.x, base.y, base.w, base.h};
+    PrimaryBm.PrimaryBm.SetTarget(XY{view.x, view.y}, XY{view.w, view.h});
+    PrimaryBm.PrimaryBm.SetClip(&clip);
+    PrimaryBm.PrimaryBm.SetOverlay(TouchDrawOverlay);
+    gSBCursorScale = std::max(1.0f, static_cast<float>(view.h) / 480.0f);
+}
+} // namespace
+#endif
+
 #ifdef __ANDROID__
 //--------------------------------------------------------------------------------------------
 // Touch input (Android). The game expects a mouse with two buttons:
@@ -133,6 +190,8 @@ void CheatSound() {
 //   two-finger tap     -> right click
 //   three-finger tap   -> show / hide the on-screen keyboard
 //   Back button        -> right click at the last position
+//   two-finger pinch   -> zoom the picture, two-finger drag moves it while zoomed
+//   buttons in the bars left and right of the picture: menu, pause, keyboard, speed, right click
 //
 // Touches are turned into regular SDL mouse events and sent through ProcessEvent(), because
 // the rooms read the type of the current event (FrameWnd->Mess). The game works out what is
@@ -175,7 +234,27 @@ struct TouchState {
     Uint32 lastTapTime{0};
     SLONG lastTapX{0}, lastTapY{0};
     bool touchInUse{false}; // the last pointer input came from a finger, not from a real mouse
+
+    // second finger and pinch zoom
+    SDL_FingerID second{0};
+    SLONG secondX{0}, secondY{0};
+    bool pinching{false};
+    float pinchDist{1.0f};
+    float pinchMidX{0.0f}, pinchMidY{0.0f};
+    float pinchZoom{1.0f};
+    float pinchU{0.5f}, pinchV{0.5f}; // point of the picture (0..1) under the fingers when the pinch began
+
+    // fingers that went down outside of the picture (on a button or on the empty bar)
+    std::vector<SDL_FingerID> barFingers;
+    SLONG pressedButton{-1};
 } gTouch;
+
+enum TouchButtonAction { BtnMenu, BtnPause, BtnKeyboard, BtnFaster, BtnSlower, BtnBack };
+
+struct TouchButton {
+    SDL_Rect rect;
+    TouchButtonAction action;
+};
 
 void TouchOutputSize(SLONG &w, SLONG &h) {
     w = 0;
@@ -219,6 +298,216 @@ void TouchSendButton(TouchAction action, SLONG x, SLONG y) {
     ev.button.x = x;
     ev.button.y = y;
     TouchDispatch(ev);
+}
+
+void TouchSendKey(SDL_Keycode sym) {
+    for (SLONG pass = 0; pass < 2; pass++) {
+        SDL_Event ev;
+        SDL_zero(ev);
+        ev.type = (pass == 0) ? SDL_KEYDOWN : SDL_KEYUP;
+        ev.key.timestamp = SDL_GetTicks();
+        ev.key.windowID = SDL_GetWindowID(FrameWnd->m_hWnd);
+        ev.key.state = (pass == 0) ? SDL_PRESSED : SDL_RELEASED;
+        ev.key.keysym.sym = sym;
+        ev.key.keysym.scancode = SDL_GetScancodeFromKey(sym);
+        TouchDispatch(ev);
+    }
+}
+
+void TouchSendText(const char *text) {
+    SDL_Event ev;
+    SDL_zero(ev);
+    ev.type = SDL_TEXTINPUT;
+    ev.text.timestamp = SDL_GetTicks();
+    ev.text.windowID = SDL_GetWindowID(FrameWnd->m_hWnd);
+    SDL_strlcpy(ev.text.text, text, sizeof(ev.text.text));
+    TouchDispatch(ev);
+}
+
+// The buttons in the bars next to the picture; none if the bars are too narrow
+std::vector<TouchButton> TouchLayoutButtons() {
+    std::vector<TouchButton> buttons;
+    SLONG w = 0;
+    SLONG h = 0;
+    TouchOutputSize(w, h);
+    const ATView base = GetBaseView(w, h);
+    const SLONG barLeft = base.x;
+    const SLONG barRight = w - (base.x + base.w);
+    const TouchButtonAction left[3] = {BtnMenu, BtnPause, BtnKeyboard};
+    const TouchButtonAction right[3] = {BtnFaster, BtnSlower, BtnBack};
+
+    for (SLONG side = 0; side < 2; side++) {
+        const SLONG barW = (side == 0) ? barLeft : barRight;
+        const SLONG barX = (side == 0) ? 0 : base.x + base.w;
+        if (barW < h / 8) {
+            continue;
+        }
+        const SLONG size = std::min(barW * 3 / 4, h / 5);
+        for (SLONG i = 0; i < 3; i++) {
+            const SLONG cy = h * (2 * i + 1) / 6;
+            buttons.push_back(TouchButton{SDL_Rect{barX + (barW - size) / 2, cy - size / 2, size, size}, (side == 0) ? left[i] : right[i]});
+        }
+    }
+    return buttons;
+}
+
+void TouchFillTriangle(SDL_Renderer *renderer, SLONG tipX, SLONG centerY, SLONG length, SLONG halfHeight, SLONG direction) {
+    // direction 1: tip points to the right, -1: to the left
+    for (SLONG i = 0; i <= length; i++) {
+        const SLONG x = tipX - direction * i;
+        const SLONG half = halfHeight * i / std::max(1, length);
+        SDL_RenderDrawLine(renderer, x, centerY - half, x, centerY + half);
+    }
+}
+
+void TouchDrawOverlay(SDL_Renderer *renderer) {
+    const std::vector<TouchButton> buttons = TouchLayoutButtons();
+    if (buttons.empty()) {
+        return;
+    }
+
+    SDL_BlendMode oldMode = SDL_BLENDMODE_NONE;
+    SDL_GetRenderDrawBlendMode(renderer, &oldMode);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
+    for (SLONG i = 0; i < static_cast<SLONG>(buttons.size()); i++) {
+        const SDL_Rect r = buttons[i].rect;
+        const SLONG u = std::max(1, r.w / 16); // drawing unit
+        const SLONG cx = r.x + r.w / 2;
+        const SLONG cy = r.y + r.h / 2;
+
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, (gTouch.pressedButton == i) ? 90 : 28);
+        SDL_RenderFillRect(renderer, &r);
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 110);
+        SDL_RenderDrawRect(renderer, &r);
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 210);
+
+        switch (buttons[i].action) {
+        case BtnMenu: { // three bars
+            for (SLONG k = -1; k <= 1; k++) {
+                const SDL_Rect bar{cx - 4 * u, cy + k * 3 * u - u / 2, 8 * u, std::max(1, u)};
+                SDL_RenderFillRect(renderer, &bar);
+            }
+        } break;
+        case BtnPause: { // two upright bars
+            const SDL_Rect a{cx - 3 * u, cy - 4 * u, 2 * u, 8 * u};
+            const SDL_Rect b{cx + u, cy - 4 * u, 2 * u, 8 * u};
+            SDL_RenderFillRect(renderer, &a);
+            SDL_RenderFillRect(renderer, &b);
+        } break;
+        case BtnKeyboard: { // keyboard outline with keys
+            const SDL_Rect frame{cx - 5 * u, cy - 3 * u, 10 * u, 6 * u};
+            SDL_RenderDrawRect(renderer, &frame);
+            for (SLONG k = 0; k < 4; k++) {
+                const SDL_Rect key{cx - 4 * u + k * 2 * u + u / 2, cy - 2 * u, u, u};
+                SDL_RenderFillRect(renderer, &key);
+            }
+            const SDL_Rect space{cx - 3 * u, cy + u, 6 * u, u};
+            SDL_RenderFillRect(renderer, &space);
+        } break;
+        case BtnFaster: // fast forward
+            TouchFillTriangle(renderer, cx, cy, 4 * u, 4 * u, 1);
+            TouchFillTriangle(renderer, cx + 4 * u, cy, 4 * u, 4 * u, 1);
+            break;
+        case BtnSlower: // rewind
+            TouchFillTriangle(renderer, cx, cy, 4 * u, 4 * u, -1);
+            TouchFillTriangle(renderer, cx - 4 * u, cy, 4 * u, 4 * u, -1);
+            break;
+        case BtnBack: { // arrow to the left: right click, leaves a room
+            TouchFillTriangle(renderer, cx - 5 * u, cy, 4 * u, 4 * u, -1);
+            const SDL_Rect shaft{cx - u, cy - u, 6 * u, 2 * u};
+            SDL_RenderFillRect(renderer, &shaft);
+        } break;
+        default:
+            break;
+        }
+    }
+
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_SetRenderDrawBlendMode(renderer, oldMode);
+}
+
+void TouchRightClick(SLONG x, SLONG y);
+
+void TouchPressButton(TouchButtonAction action) {
+    switch (action) {
+    case BtnMenu:
+        TouchSendKey(SDLK_ESCAPE);
+        break;
+    case BtnPause:
+        TouchSendKey(SDLK_PAUSE);
+        break;
+    case BtnKeyboard:
+        if (SDL_IsTextInputActive() == SDL_TRUE) {
+            SDL_StopTextInput();
+        } else {
+            SDL_StartTextInput();
+        }
+        break;
+    case BtnFaster:
+        TouchSendText("+");
+        break;
+    case BtnSlower:
+        TouchSendText("-");
+        break;
+    case BtnBack:
+        TouchRightClick(gTouch.lastX, gTouch.lastY);
+        break;
+    default:
+        break;
+    }
+}
+
+// Keeps the zoomed picture over the whole base area and applies it
+void TouchSetZoom(float zoom, float offX, float offY) {
+    SLONG w = 0;
+    SLONG h = 0;
+    TouchOutputSize(w, h);
+    const ATView base = GetBaseView(w, h);
+    gViewZoom = std::min(kMaxZoom, std::max(1.0f, zoom));
+    if (gViewZoom < 1.05f) {
+        gViewZoom = 1.0f;
+    }
+    const float minX = static_cast<float>(base.w) * (1.0f - gViewZoom);
+    const float minY = static_cast<float>(base.h) * (1.0f - gViewZoom);
+    gViewOffX = std::min(0.0f, std::max(minX, offX));
+    gViewOffY = std::min(0.0f, std::max(minY, offY));
+    ApplyView();
+}
+
+// Both fingers are down and have moved: zoom around the point between them
+void TouchPinch() {
+    SLONG w = 0;
+    SLONG h = 0;
+    TouchOutputSize(w, h);
+    const ATView base = GetBaseView(w, h);
+    const float dx = static_cast<float>(gTouch.lastX - gTouch.secondX);
+    const float dy = static_cast<float>(gTouch.lastY - gTouch.secondY);
+    const float dist = std::max(1.0f, std::sqrt(dx * dx + dy * dy));
+    const float midX = static_cast<float>(gTouch.lastX + gTouch.secondX) / 2.0f;
+    const float midY = static_cast<float>(gTouch.lastY + gTouch.secondY) / 2.0f;
+
+    if (!gTouch.pinching) {
+        const float slop = static_cast<float>(h) * 0.05f;
+        const bool spread = std::fabs(dist - gTouch.pinchDist) > slop;
+        const bool moved = gViewZoom > 1.0f && (std::fabs(midX - gTouch.pinchMidX) > slop || std::fabs(midY - gTouch.pinchMidY) > slop);
+        if (!spread && !moved) {
+            return;
+        }
+        // from now on this is a zoom gesture, not a two-finger tap
+        gTouch.pinching = true;
+        gTouch.multi = false;
+        gTouch.consumed = true;
+        gTouch.pinchZoom = gViewZoom;
+        const ATView view = GetView(w, h);
+        gTouch.pinchU = (gTouch.pinchMidX - static_cast<float>(view.x)) / static_cast<float>(std::max(1, view.w));
+        gTouch.pinchV = (gTouch.pinchMidY - static_cast<float>(view.y)) / static_cast<float>(std::max(1, view.h));
+    }
+
+    const float zoom = std::min(kMaxZoom, std::max(1.0f, gTouch.pinchZoom * dist / gTouch.pinchDist));
+    const float offX = midX - static_cast<float>(base.x) - gTouch.pinchU * static_cast<float>(base.w) * zoom;
+    const float offY = midY - static_cast<float>(base.y) - gTouch.pinchV * static_cast<float>(base.h) * zoom;
+    TouchSetZoom(zoom, offX, offY);
 }
 
 void TouchEnqueue(TouchAction action, SLONG x, SLONG y, Uint32 delay) {
@@ -342,6 +631,33 @@ bool TouchHandleEvent(const SDL_Event &eventIn) {
         y = static_cast<SLONG>(event.tfinger.y * static_cast<FLOAT>(h));
     }
 
+    // Fingers outside of the picture: buttons, or nothing at all
+    if (event.type == SDL_FINGERDOWN) {
+        const ATView base = GetBaseView(w, h);
+        if (x < base.x || x >= base.x + base.w) {
+            gTouch.barFingers.push_back(event.tfinger.fingerId);
+            const std::vector<TouchButton> buttons = TouchLayoutButtons();
+            for (SLONG i = 0; i < static_cast<SLONG>(buttons.size()); i++) {
+                const SDL_Rect &r = buttons[i].rect;
+                if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) {
+                    gTouch.pressedButton = i;
+                    TouchPressButton(buttons[i].action);
+                    break;
+                }
+            }
+            return true;
+        }
+    } else if (event.type == SDL_FINGERMOTION || event.type == SDL_FINGERUP) {
+        const auto it = std::find(gTouch.barFingers.begin(), gTouch.barFingers.end(), event.tfinger.fingerId);
+        if (it != gTouch.barFingers.end()) {
+            if (event.type == SDL_FINGERUP) {
+                gTouch.barFingers.erase(it);
+                gTouch.pressedButton = -1;
+            }
+            return true;
+        }
+    }
+
     switch (event.type) {
     case SDL_FINGERDOWN: {
         gTouch.fingers++;
@@ -352,17 +668,27 @@ bool TouchHandleEvent(const SDL_Event &eventIn) {
             gTouch.dragging = false;
             gTouch.consumed = false;
             gTouch.multi = false;
+            gTouch.pinching = false;
             gTouch.startX = gTouch.lastX = x;
             gTouch.startY = gTouch.lastY = y;
             gTouch.downTime = SDL_GetTicks();
             TouchFlushQueue();
             TouchSendMotion(x, y);
         } else if (gTouch.fingers == 2) {
+            gTouch.second = event.tfinger.fingerId;
+            gTouch.secondX = x;
+            gTouch.secondY = y;
             if (!gTouch.dragging && !gTouch.consumed) {
                 gTouch.multi = true;
+                const float dx = static_cast<float>(gTouch.lastX - x);
+                const float dy = static_cast<float>(gTouch.lastY - y);
+                gTouch.pinchDist = std::max(1.0f, std::sqrt(dx * dx + dy * dy));
+                gTouch.pinchMidX = static_cast<float>(gTouch.lastX + x) / 2.0f;
+                gTouch.pinchMidY = static_cast<float>(gTouch.lastY + y) / 2.0f;
             }
         } else if (gTouch.fingers == 3) {
             gTouch.multi = false;
+            gTouch.pinching = false;
             if (!gTouch.dragging) {
                 gTouch.consumed = true;
                 if (SDL_IsTextInputActive() == SDL_TRUE) {
@@ -375,6 +701,17 @@ bool TouchHandleEvent(const SDL_Event &eventIn) {
         return true;
     }
     case SDL_FINGERMOTION: {
+        if (gTouch.active && gTouch.fingers == 2 && (gTouch.multi || gTouch.pinching)) {
+            if (event.tfinger.fingerId == gTouch.primary) {
+                gTouch.lastX = x;
+                gTouch.lastY = y;
+            } else if (event.tfinger.fingerId == gTouch.second) {
+                gTouch.secondX = x;
+                gTouch.secondY = y;
+            }
+            TouchPinch();
+            return true;
+        }
         if (!gTouch.active || event.tfinger.fingerId != gTouch.primary || gTouch.consumed || gTouch.multi) {
             return true;
         }
@@ -392,6 +729,7 @@ bool TouchHandleEvent(const SDL_Event &eventIn) {
     }
     case SDL_FINGERUP: {
         gTouch.fingers = max(0, gTouch.fingers - 1);
+        gTouch.pinching = false;
         if (gTouch.active && event.tfinger.fingerId == gTouch.primary) {
             gTouch.active = false;
             if (gTouch.dragging) {
@@ -419,6 +757,9 @@ bool TouchHandleEvent(const SDL_Event &eventIn) {
         gTouch.fingers = 0;
         gTouch.active = false;
         gTouch.dragging = false;
+        gTouch.pinching = false;
+        gTouch.barFingers.clear();
+        gTouch.pressedButton = -1;
         return false;
     case SDL_KEYDOWN:
         if (event.key.keysym.sym == SDLK_AC_BACK) {
@@ -551,7 +892,6 @@ void GameFrame::UpdateWindow() const {
     UpdateFrameSize();
 }
 
-constexpr SLONG getAspectWidth(SLONG height) { return static_cast<SLONG>(static_cast<float>(height) * (640.0f / 480.0f)); }
 
 void GameFrame::UpdateFrameSize() const {
     SLONG screenW = 0, screenH = 0;
@@ -560,6 +900,10 @@ void GameFrame::UpdateFrameSize() const {
     // update setting file
     Sim.Options.OptionScreenWindowedWidth = screenW;
     Sim.Options.OptionScreenWindowedHeight = screenH;
+#ifdef __ANDROID__
+    ApplyView();
+    return;
+#endif
     if (Sim.Options.OptionKeepAspectRatio == 0) {
         PrimaryBm.PrimaryBm.SetTarget(XY{0, 0}, XY{screenW, screenH});
     } else {
@@ -574,6 +918,15 @@ void GameFrame::TranslatePointToGameSpace(CPoint *p) const {
     SLONG screenW = 0;
     SLONG screenH = 0;
     SDL_GetRendererOutputSize(SDL_GetRenderer(m_hWnd), &screenW, &screenH);
+
+#ifdef __ANDROID__
+    const ATView view = GetView(screenW, screenH);
+    if (view.w > 0 && view.h > 0) {
+        p->x = static_cast<SLONG>(static_cast<FLOAT>(p->x - view.x) * 640.0f / static_cast<FLOAT>(view.w));
+        p->y = static_cast<SLONG>(static_cast<FLOAT>(p->y - view.y) * 480.0f / static_cast<FLOAT>(view.h));
+    }
+    return;
+#endif
 
     FLOAT x = static_cast<FLOAT>(p->x);
     FLOAT y = static_cast<FLOAT>(p->y);
@@ -598,6 +951,13 @@ void GameFrame::TranslatePointToScreenSpace(SLONG &x, SLONG &y) const {
     SLONG screenW = 0;
     SLONG screenH = 0;
     SDL_GetRendererOutputSize(SDL_GetRenderer(m_hWnd), &screenW, &screenH);
+
+#ifdef __ANDROID__
+    const ATView view = GetView(screenW, screenH);
+    x = view.x + static_cast<SLONG>(static_cast<FLOAT>(x) * static_cast<FLOAT>(view.w) / 640.0f);
+    y = view.y + static_cast<SLONG>(static_cast<FLOAT>(y) * static_cast<FLOAT>(view.h) / 480.0f);
+    return;
+#endif
 
     const SLONG aspectWidth = getAspectWidth(screenH);
     const SLONG origScreenW = screenW;
@@ -1181,7 +1541,8 @@ void GameFrame::OnPaint() {
                         SLONG _x = gMousePosition.x;
                         SLONG _y = gMousePosition.y;
                         TranslatePointToScreenSpace(_x, _y);
-                        pCursor->MoveImage(_x - MouseCursorOffset.x, _y - MouseCursorOffset.y);
+                        pCursor->MoveImage(_x - static_cast<SLONG>(static_cast<float>(MouseCursorOffset.x) * gSBCursorScale),
+                                            _y - static_cast<SLONG>(static_cast<float>(MouseCursorOffset.y) * gSBCursorScale));
                     }
                 }
             }
@@ -1347,7 +1708,8 @@ void GameFrame::OnMouseMove(UINT /*nFlags*/, CPoint point) {
             SLONG _x = gMousePosition.x;
             SLONG _y = gMousePosition.y;
             FrameWnd->TranslatePointToScreenSpace(_x, _y);
-            pCursor->MoveImage(_x - MouseCursorOffset.x, _y - MouseCursorOffset.y);
+            pCursor->MoveImage(_x - static_cast<SLONG>(static_cast<float>(MouseCursorOffset.x) * gSBCursorScale),
+                                            _y - static_cast<SLONG>(static_cast<float>(MouseCursorOffset.y) * gSBCursorScale));
         }
     }
 }

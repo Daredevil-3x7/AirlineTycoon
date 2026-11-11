@@ -217,6 +217,12 @@ void CTakeOffApp::CLI(int argc, char *argv[]) {
         if (stricmp(Argument, "/f") == 0) {
             gLanguage = LANGUAGE_F;
         }
+        if (strncmp(Argument, "/lang=", 6) == 0) { // any language by its number (LANGUAGE_...), used by the Android launcher
+            const SLONG language = atoi(Argument + 6);
+            if (language >= LANGUAGE_D && language <= LANGUAGE_B) {
+                gLanguage = language;
+            }
+        }
         // if (stricmp (Argument, "/test")==0) bTest = TRUE;
 
         if (stricmp(Argument, "/window") == 0) {

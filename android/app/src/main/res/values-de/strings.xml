@@ -8,4 +8,7 @@
     <string name="import_not_game">Diese ZIP enthält keine Spieldateien (die Ordner gli, room, misc, data fehlen).</string>
     <string name="import_no_storage">Der App-Speicher ist nicht verfügbar.</string>
     <string name="import_manual">Alternative: Kopiere die Spielordner mit einem Computer nach\n%1$s</string>
+    <string name="language_button">Spielsprache: %1$s</string>
+    <string name="language_title">Spielsprache (gilt ab dem nächsten Start des Spiels)</string>
+    <string name="shortcut_language">Sprache</string>
 </resources>

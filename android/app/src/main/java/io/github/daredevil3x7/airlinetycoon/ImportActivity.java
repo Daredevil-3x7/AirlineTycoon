@@ -1,7 +1,11 @@
 package io.github.daredevil3x7.airlinetycoon;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -40,6 +44,16 @@ import java.util.zip.ZipInputStream;
 public class ImportActivity extends Activity {
     private static final String TAG = "ATImport";
     private static final int REQUEST_PICK_ZIP = 1;
+    /** Sent by the app shortcut (long press on the app icon). */
+    static final String ACTION_LANGUAGE = "io.github.daredevil3x7.airlinetycoon.LANGUAGE";
+
+    private static final String PREFS = "at";
+    private static final String PREF_LANGUAGE = "language";
+    /** Names and the game's language numbers (LANGUAGE_... in defines.h). */
+    private static final String[] LANGUAGE_NAMES =
+            {"Deutsch", "English", "Français", "Polski", "Nederlands", "Italiano", "Español", "Português"};
+    private static final int[] LANGUAGE_IDS = {0, 1, 2, 4, 5, 6, 7, 8};
+    private static final String[] LANGUAGE_CODES = {"de", "en", "fr", "pl", "nl", "it", "es", "pt"};
 
     /** Top-level folders of the game. Everything above them inside the ZIP is stripped. */
     private static final Set<String> DATA_DIRS =
@@ -52,6 +66,7 @@ public class ImportActivity extends Activity {
     private TextView status;
     private Button pickButton;
     private ProgressBar progress;
+    private Button languageButton;
     private boolean importing;
 
     @Override
@@ -65,9 +80,69 @@ public class ImportActivity extends Activity {
             status.setText(R.string.import_no_storage);
             return;
         }
-        if (hasGameData(dataDir)) {
+        if (ACTION_LANGUAGE.equals(getIntent().getAction())) {
+            chooseLanguage(true);
+        } else if (hasGameData(dataDir)) {
             launchGame();
         }
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Language
+    // ---------------------------------------------------------------------------------------
+
+    /** The language number for the game: the player's choice, else the device language, else -1. */
+    static int getLanguage(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences(PREFS, MODE_PRIVATE);
+        if (prefs.contains(PREF_LANGUAGE)) {
+            return prefs.getInt(PREF_LANGUAGE, -1);
+        }
+        String device = Locale.getDefault().getLanguage();
+        for (int i = 0; i < LANGUAGE_CODES.length; i++) {
+            if (LANGUAGE_CODES[i].equals(device)) {
+                return LANGUAGE_IDS[i];
+            }
+        }
+        return -1;
+    }
+
+    private String languageName() {
+        int language = getLanguage(this);
+        for (int i = 0; i < LANGUAGE_IDS.length; i++) {
+            if (LANGUAGE_IDS[i] == language) {
+                return LANGUAGE_NAMES[i];
+            }
+        }
+        return LANGUAGE_NAMES[1];
+    }
+
+    private void chooseLanguage(final boolean launchAfterwards) {
+        int language = getLanguage(this);
+        int checked = 1;
+        for (int i = 0; i < LANGUAGE_IDS.length; i++) {
+            if (LANGUAGE_IDS[i] == language) {
+                checked = i;
+            }
+        }
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.language_title)
+                .setSingleChoiceItems(LANGUAGE_NAMES, checked, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(PREF_LANGUAGE, LANGUAGE_IDS[which]).apply();
+                        languageButton.setText(getString(R.string.language_button, languageName()));
+                        dialog.dismiss();
+                    }
+                })
+                .setOnDismissListener(new DialogInterface.OnDismissListener() {
+                    @Override
+                    public void onDismiss(DialogInterface dialog) {
+                        if (launchAfterwards && hasGameData(dataDir)) {
+                            launchGame();
+                        }
+                    }
+                })
+                .show();
     }
 
     // ---------------------------------------------------------------------------------------
@@ -104,6 +179,16 @@ public class ImportActivity extends Activity {
             }
         });
         column.addView(pickButton);
+
+        languageButton = new Button(this);
+        languageButton.setText(getString(R.string.language_button, languageName()));
+        languageButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                chooseLanguage(false);
+            }
+        });
+        column.addView(languageButton);
 
         progress = new ProgressBar(this);
         progress.setIndeterminate(true);

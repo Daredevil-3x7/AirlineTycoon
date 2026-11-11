@@ -528,15 +528,27 @@ SLONG SB_CPrimaryBitmap::Present() {
             return -1;
         }
 
+        if (HasClip) {
+            SDL_RenderSetClipRect(lpDD, &ClipRect);
+        }
+
         const SDL_Rect target = SDL_Rect{TargetOffset.x, TargetOffset.y, TargetSize.x, TargetSize.y};
         // Copy our primary texture to the backbuffer
         if (SDL_RenderCopy(lpDD, lpTexture, nullptr, &target) < 0) {
+            SDL_RenderSetClipRect(lpDD, nullptr);
             return -2;
         }
 
         // Render the cursor onto the backbuffer
         if (Cursor != nullptr) {
             Cursor->Render(lpDD);
+        }
+
+        if (HasClip) {
+            SDL_RenderSetClipRect(lpDD, nullptr);
+        }
+        if (Overlay != nullptr) {
+            Overlay(lpDD);
         }
 
         SDL_RenderPresent(lpDD);

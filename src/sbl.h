@@ -173,6 +173,8 @@ class SB_CBitmapCore {
     SLONG RefCounter{0};
 };
 
+extern float gSBCursorScale; // size of the mouse cursor relative to its bitmap
+
 class SB_CCursor {
   public:
     SB_CCursor(class SB_CPrimaryBitmap *, class SB_CBitmapCore * = NULL);
@@ -211,6 +213,15 @@ class SB_CPrimaryBitmap : public SB_CBitmapCore {
     SLONG Flip(void);
     SLONG Present(void);
     void SetTarget(XY offset, XY size);
+    // The picture is only drawn inside this rectangle (nullptr: no limit)
+    void SetClip(const SDL_Rect *clip) {
+        HasClip = (clip != nullptr);
+        if (clip != nullptr) {
+            ClipRect = *clip;
+        }
+    }
+    // Called after the picture and the cursor have been drawn, before the frame is shown
+    void SetOverlay(void (*overlay)(SDL_Renderer *)) { Overlay = overlay; }
     void SetVSync(BOOL toggle) { SDL_RenderSetVSync(lpDD, toggle); }
 
     void AssignCursor(SB_CCursor *c) { Cursor = c; }
@@ -222,6 +233,9 @@ class SB_CPrimaryBitmap : public SB_CBitmapCore {
 
     XY TargetSize{640, 480};
     XY TargetOffset{0, 0};
+    SDL_Rect ClipRect{0, 0, 0, 0};
+    bool HasClip{false};
+    void (*Overlay)(SDL_Renderer *){nullptr};
 
     SDL_Window *Window{};
     SB_CCursor *Cursor{};

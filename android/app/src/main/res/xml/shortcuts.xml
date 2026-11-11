@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long press on the app icon -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher"
+        android:shortcutId="language"
+        android:shortcutShortLabel="@string/shortcut_language">
+        <intent
+            android:action="io.github.daredevil3x7.airlinetycoon.LANGUAGE"
+            android:targetClass="io.github.daredevil3x7.airlinetycoon.ImportActivity"
+            android:targetPackage="io.github.daredevil3x7.airlinetycoon" />
+    </shortcut>
+</shortcuts>
