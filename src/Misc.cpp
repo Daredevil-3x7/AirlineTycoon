@@ -18,9 +18,6 @@
 
 #include <algorithm>
 #include <cassert>
-#include <fstream>
-#include <string>
-#include <vector>
 #include <chrono>
 #include <cmath>
 #include <locale>
@@ -1049,58 +1046,41 @@ void HEADLINES::AddOverride(SLONG Newspaper, const CString &HeadlineText, __int6
 }
 
 //--------------------------------------------------------------------------------------------
-// Adds real-world headlines to the newspapers, if the file "news.txt" exists in the game folder
-// (one headline per line, ISO-8859-1). They are decoration only: they do not count as
-// "interesting news" and only fill free lines of a paper.
+// Adds the news of the optional events to free lines of the newspapers: what starts tomorrow,
+// what is going on today, and how the price of kerosene is developing
 //--------------------------------------------------------------------------------------------
-void HEADLINES::AddRealNews() {
-    if (Sim.bNetwork != 0) {
+void HEADLINES::AddGameNews() {
+    if (!AtExtrasActive()) {
         return;
     }
 
-    std::ifstream file((AppPath + CString("news.txt")).c_str());
-    if (!file.is_open()) {
-        return;
-    }
-
-    std::vector<std::string> lines;
-    std::string line;
-    while (std::getline(file, line)) {
-        while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) {
-            line.pop_back();
+    auto add = [this](SLONG paper, const CString &text, bool interesting) {
+        if (text.IsEmpty()) {
+            return;
         }
-        if (line.size() >= 8 && line.size() <= 120) {
-            lines.push_back(line);
-        }
-    }
-    if (lines.empty()) {
-        return;
-    }
-
-    const SLONG count = static_cast<SLONG>(lines.size());
-    SLONG next = (Sim.Date * 5) % count; // other headlines every day
-
-    for (SLONG paper = 0; paper < 3; paper++) {
-        SLONG used = 0;
         for (SLONG d = 0; d < 10; d++) {
-            if (!Headline[paper * 10 + d].Headline.IsEmpty()) {
-                used++;
-            }
-        }
-        for (SLONG k = 0; k < 2 && used < 4; k++) {
-            for (SLONG d = 0; d < 10; d++) {
-                CHeadline &slot = Headline[paper * 10 + d];
-                if (slot.Headline.IsEmpty()) {
-                    slot.Headline = lines[next % count].c_str();
-                    slot.PictureId = 0;
-                    slot.PicturePriority = 0;
-                    used++;
-                    break;
+            CHeadline &slot = Headline[paper * 10 + d];
+            if (slot.Headline.IsEmpty()) {
+                slot.Headline = text;
+                slot.PictureId = 0;
+                slot.PicturePriority = 0;
+                if (interesting) {
+                    IsInteresting = TRUE;
                 }
+                return;
             }
-            next++;
         }
+    };
+
+    ATGameEvent event;
+    if (AtEventStartingOn(Sim.Date + 1, event)) {
+        add(1, AtEventHeadline(event, true), true);
+        add(Sim.Date % 2 == 0 ? 0 : 2, AtEventHeadline(event, true), true);
     }
+    if (AtEventOnDay(Sim.Date, event)) {
+        add(Sim.Date % 2 == 0 ? 2 : 0, AtEventHeadline(event, false), true);
+    }
+    add(1, AtKerosinHeadline(), false);
 }
 
 //--------------------------------------------------------------------------------------------

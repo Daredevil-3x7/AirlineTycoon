@@ -46,6 +46,36 @@ void Bot::grabNewFlights() {
 }
 
 /* Room: office or laptop, financial advisor >= 0 for BilanzWoche, spy >= 50 for any competitor */
+SLONG Bot::getMoodVictim() const {
+    if (!AtExtrasActive()) {
+        return -1;
+    }
+    SLONG victim = -1;
+    SLONG worst = -30;
+    for (SLONG p = 0; p < 4; p++) {
+        if (p != qPlayer.PlayerNum && (Sim.Players.Players[p].IsOut == 0) && qPlayer.Sympathie[p] < worst) {
+            worst = qPlayer.Sympathie[p];
+            victim = p;
+        }
+    }
+    return victim;
+}
+
+SLONG Bot::getSabotageVictim() const {
+    const SLONG victim = getMoodVictim();
+    return (victim != -1) ? victim : mNemesis;
+}
+
+/* Sabotage is part of some difficulty levels only. With the optional rules every level strikes
+ * back at an airline it has come to hate. */
+bool Bot::sabotageAllowed() const {
+    if (qPlayer.RobotUse(ROBOT_USE_MUCH_SABOTAGE) || qPlayer.RobotUse(ROBOT_USE_EXTREME_SABOTAGE)) {
+        return true;
+    }
+    const SLONG victim = getMoodVictim();
+    return victim != -1 && qPlayer.Sympathie[victim] <= -50;
+}
+
 __int64 Bot::getNemesisScore(SLONG p) const {
     __int64 score = 0;
     auto &qTarget = Sim.Players.Players[p];
@@ -715,6 +745,7 @@ std::pair<SLONG, SLONG> Bot::kerosineQualiOptimization(__int64 moneyAvailable, D
 /* Room: any (competitor data gated by spy checks); used at the saboteur */
 SabotageMode Bot::determineSabotageMode(__int64 moneyAvailable, bool print) {
     std::map<SabotageMode, int> candidates;
+    const SLONG victim = getSabotageVictim();
 
     if (qPlayer.RobotUse(ROBOT_USE_EXTREME_SABOTAGE)) {
         /* special mode for specific missions */
@@ -738,17 +769,17 @@ SabotageMode Bot::determineSabotageMode(__int64 moneyAvailable, bool print) {
         /* check some conditions for what could be a good sabotage */
         bool earlyGame = (Sim.Date < 15);
         bool nemesisBroke = false;
-        if ((mNemesis != -1) && (qPlayer.HasBerater(BERATERTYP_INFO) > 0)) {
-            nemesisBroke = (Sim.Players.Players[mNemesis].Money < 1e6);
+        if ((victim != -1) && (qPlayer.HasBerater(BERATERTYP_INFO) > 0)) {
+            nemesisBroke = (Sim.Players.Players[victim].Money < 1e6);
         }
         bool nemesisManyOffices = false;
-        if ((mNemesis != -1) && (qPlayer.HasBerater(BERATERTYP_INFO) >= 50)) {
-            SLONG numOffices = Sim.Players.Players[mNemesis].Statistiken[STAT_NIEDERLASSUNGEN].GetAtPastDay(0);
+        if ((victim != -1) && (qPlayer.HasBerater(BERATERTYP_INFO) >= 50)) {
+            SLONG numOffices = Sim.Players.Players[victim].Statistiken[STAT_NIEDERLASSUNGEN].GetAtPastDay(0);
             nemesisManyOffices = (numOffices >= 5);
         }
         bool nemesisHasRoutes = false;
-        if ((mNemesis != -1) && (qPlayer.HasBerater(BERATERTYP_INFO) >= 40)) {
-            SLONG numRoutes = Sim.Players.Players[mNemesis].Statistiken[STAT_ROUTEN].GetAtPastDay(0);
+        if ((victim != -1) && (qPlayer.HasBerater(BERATERTYP_INFO) >= 40)) {
+            SLONG numRoutes = Sim.Players.Players[victim].Statistiken[STAT_ROUTEN].GetAtPastDay(0);
             nemesisHasRoutes = (numRoutes >= 4);
         }
         bool routeTheftPossible = (!earlyGame && (mRouteToSteal != -1));
@@ -771,6 +802,18 @@ SabotageMode Bot::determineSabotageMode(__int64 moneyAvailable, bool print) {
         candidates[SabotageMode::Special::BankHack] = (nemesisBroke ? 50 : 5);
         candidates[SabotageMode::Special::GroundAircraft] = 10;
         candidates[SabotageMode::Special::RouteTheft] = (routeTheftPossible ? 10 : 0);
+
+        /* optional rules: only an airline we really hate gets the nasty jobs */
+        if (AtExtrasActive() && victim != -1 && qPlayer.Sympathie[victim] > -60) {
+            candidates[SabotageMode::Plane::EngineBreakdown] = 0;
+            candidates[SabotageMode::Personal::OfficeBomb] = 0;
+            candidates[SabotageMode::Personal::ProvokeStrike] = 0;
+            candidates[SabotageMode::Special::CutTelephones] = 0;
+            candidates[SabotageMode::Special::FalsePressRelease] = 0;
+            candidates[SabotageMode::Special::BankHack] = 0;
+            candidates[SabotageMode::Special::GroundAircraft] = 0;
+            candidates[SabotageMode::Special::RouteTheft] = 0;
+        }
     }
 
     /* get highest trust level needed */

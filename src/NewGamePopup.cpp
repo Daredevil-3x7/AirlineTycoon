@@ -276,7 +276,8 @@ void NewGamePopup::Konstruktor(BOOL /*bHandy*/, SLONG /*PlayerNum*/) {
         Routen.ReInit("routen.csv", true);
         Sim.ChooseStartup();
 
-        Airport.LoadAirport(1, 1, 1, 1, 1, 1, 1, 1, 1, 1);
+        Airport.LoadAirport(Sim.LeftEnd, Sim.CheckIn, Sim.Office, Sim.Entry, Sim.Shops, Sim.Cafe, Sim.Security, Sim.Suitcase, Sim.WaitZone, Sim.RightEnd);
+        Sim.ValidateStartGates();
         AIRPORT::UpdateStaticDoorImage();
         Airport.CreateGateMapper();
         return;
@@ -1198,7 +1199,9 @@ void NewGamePopup::OnPaint() {
                             Sim.ChooseStartup();
                         }
 
-                        Airport.LoadAirport(1, 1, 1, 1, 1, 1, 1, 1, 1, 1);
+                        Airport.LoadAirport(Sim.LeftEnd, Sim.CheckIn, Sim.Office, Sim.Entry, Sim.Shops, Sim.Cafe, Sim.Security, Sim.Suitcase, Sim.WaitZone,
+                                            Sim.RightEnd);
+                        Sim.ValidateStartGates();
                         AIRPORT::UpdateStaticDoorImage();
                         Airport.CreateGateMapper();
                     }

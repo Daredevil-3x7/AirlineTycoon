@@ -930,11 +930,12 @@ void Bot::actionBuyKerosineTank(__int64 moneyAvailable) {
 void Bot::actionSabotage(__int64 moneyAvailable) {
     actionVisitSaboteur();
 
-    if (!qPlayer.RobotUse(ROBOT_USE_MUCH_SABOTAGE) && !qPlayer.RobotUse(ROBOT_USE_EXTREME_SABOTAGE)) {
+    const SLONG victim = getSabotageVictim();
+    if (!sabotageAllowed()) {
         AT_Error("Bot::actionSabotage(): Conditions not met.");
         return;
     }
-    if (mNemesis == -1) {
+    if (victim == -1) {
         AT_Error("Bot::actionSabotage(): Have no nemesis yet.");
         return;
     }
@@ -949,13 +950,13 @@ void Bot::actionSabotage(__int64 moneyAvailable) {
         AT_Log("Bot::actionSabotage(): Try %d: Selected sabotage mode '%s', hint remaining: %d, money available: %lld", saboTry + 1,
                sabotageMode.getName().c_str(), hintRemaining, moneyAvailable);
 
-        SLONG target = mNemesis;
+        SLONG target = victim;
 
         /* select plane if required */
         if (sabotageMode.needPlane()) {
-            const auto &qNemesisPlanes = Sim.Players.Players[mNemesis].Planes;
+            const auto &qNemesisPlanes = Sim.Players.Players[victim].Planes;
             if (qNemesisPlanes.GetNumUsed() == 0) {
-                AT_Error("Bot::actionSabotage(): Cannot sabotage nemesis %s: Has no planes", Sim.Players.Players[mNemesis].AirlineX.c_str());
+                AT_Error("Bot::actionSabotage(): Cannot sabotage nemesis %s: Has no planes", Sim.Players.Players[victim].AirlineX.c_str());
                 return;
             }
             /* pick the larger out of two random planes */
@@ -986,7 +987,7 @@ void Bot::actionSabotage(__int64 moneyAvailable) {
 
         auto ret = GameMechanic::setSaboteurTarget(qPlayer, target);
         if (ret != target) {
-            AT_Error("Bot::actionSabotage(): Cannot sabotage %s %s: Cannot set as target", (target == mNemesis) ? "nemesis" : "enemy", targetName.c_str());
+            AT_Error("Bot::actionSabotage(): Cannot sabotage %s %s: Cannot set as target", (target == victim) ? "nemesis" : "enemy", targetName.c_str());
             return;
         }
 
@@ -995,11 +996,11 @@ void Bot::actionSabotage(__int64 moneyAvailable) {
         case GameMechanic::CheckSabotageResult::Ok:
             if (!GameMechanic::activateSaboteurJob(qPlayer, FALSE)) {
                 AT_Error("Bot::actionSabotage(): Failed to sabotage %s %s with '%s' (hint cost: %d, job cost: %lld)",
-                         (target == mNemesis) ? "nemesis" : "enemy", targetName.c_str(), sabotageMode.getName().c_str(), sabotageMode.getJobHints(),
+                         (target == victim) ? "nemesis" : "enemy", targetName.c_str(), sabotageMode.getName().c_str(), sabotageMode.getJobHints(),
                          sabotageMode.getJobCost());
                 return;
             }
-            AT_Log("Bot::actionSabotage(): Sabotaging %s %s with '%s' (hint cost: %d, job cost: %lld)", (target == mNemesis) ? "nemesis" : "enemy",
+            AT_Log("Bot::actionSabotage(): Sabotaging %s %s with '%s' (hint cost: %d, job cost: %lld)", (target == victim) ? "nemesis" : "enemy",
                    targetName.c_str(), sabotageMode.getName().c_str(), sabotageMode.getJobHints(), sabotageMode.getJobCost());
 
             mArabHintsTracker += sabotageMode.getJobHints();

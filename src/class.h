@@ -1037,7 +1037,7 @@ class /**/ HEADLINES {
     void ComparisonHeadlines(void);
     void ReInit(const CString &TabFilename);
     void AddOverride(SLONG Newspaper, const CString &Headlinetext, __int64 Pictureid, SLONG PicturePriority);
-    void AddRealNews(void); // optional headlines from "news.txt" (written by the Android launcher)
+    void AddGameNews(void); // announcements of the optional events and a line about the kerosene price
     void SortByPriority(void);
 
     friend class SIM;
@@ -2712,6 +2712,7 @@ class SIM // Die Simulationswelt; alles was zur aktuellen Partie gehört
     void CreateRandomUsedPlanes(void);
     void UpdateUsedPlanes(void);
     void ReformGates(void);
+    void ValidateStartGates(void);
     void ComputerOnToilet(SLONG ComputerPlayer);
     void UpdateRoomUsage(void);
 

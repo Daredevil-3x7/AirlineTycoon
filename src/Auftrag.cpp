@@ -291,6 +291,7 @@ void CAuftrag::RefillForLastMinute(SLONG AreaType, TEAKRAND *pRandom) {
 
 too_large:
     RandomCities(AreaType, Sim.HomeAirportId, pRandom);
+    AtEventAdjustOrderCities(VonCity, NachCity, pRandom);
 
     Date = UWORD(Sim.Date);
     BisDate = Date;
@@ -368,6 +369,8 @@ too_large:
         Praemie = Praemie * 8 / 5;
     }
 
+    Praemie = AtEventAdjustPremium(Praemie, VonCity, NachCity);
+
     if ((SLONG(Personen) > PlayerMaxPassagiere || Cities.CalcDistance(VonCity, NachCity) > PlayerMaxLength) && TimeOut++ < 100) {
         goto too_large;
     }
@@ -384,6 +387,7 @@ void CAuftrag::RefillForReisebuero(SLONG AreaType, TEAKRAND *pRandom) {
 
 too_large:
     RandomCities(AreaType, Sim.HomeAirportId, pRandom);
+    AtEventAdjustOrderCities(VonCity, NachCity, pRandom);
 
     Personen = 180;
     Date = UWORD(Sim.Date + 1 + pRandom->Rand(3));
@@ -468,6 +472,8 @@ too_large:
         Date = static_cast<UWORD>(Sim.Date);
         Praemie = Praemie * 4 / 5;
     }
+
+    Praemie = AtEventAdjustPremium(Praemie, VonCity, NachCity);
 
     if ((SLONG(Personen) > PlayerMaxPassagiere || Cities.CalcDistance(VonCity, NachCity) > PlayerMaxLength) && TimeOut++ < 100) {
         goto too_large;

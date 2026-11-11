@@ -54,7 +54,7 @@ public class ImportActivity extends Activity {
 
     private static final String PREFS = "at";
     private static final String PREF_LANGUAGE = "language";
-    private static final String PREF_NEWS = "news";
+    private static final String PREF_EXTRAS = "extras";
     /** Names and the game's language numbers (LANGUAGE_... in defines.h). */
     private static final String[] LANGUAGE_NAMES =
             {"Deutsch", "English", "Français", "Polski", "Nederlands", "Italiano", "Español", "Português"};
@@ -74,7 +74,7 @@ public class ImportActivity extends Activity {
     private Button startButton;
     private Button pickButton;
     private Button languageButton;
-    private Button newsButton;
+    private Button extrasButton;
     private Button exportButton;
     private Button importButton;
     private ProgressBar progress;
@@ -156,11 +156,11 @@ public class ImportActivity extends Activity {
             }
         });
 
-        newsButton = addButton(column, new View.OnClickListener() {
+        extrasButton = addButton(column, new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
-                prefs.edit().putBoolean(PREF_NEWS, !prefs.getBoolean(PREF_NEWS, true)).apply();
+                prefs.edit().putBoolean(PREF_EXTRAS, !prefs.getBoolean(PREF_EXTRAS, true)).apply();
                 updateLabels();
             }
         });
@@ -210,11 +210,11 @@ public class ImportActivity extends Activity {
 
     private void updateLabels() {
         languageButton.setText(getString(R.string.language_button, languageName()));
-        newsButton.setText(isNewsEnabled(this) ? R.string.news_on : R.string.news_off);
+        extrasButton.setText(areExtrasEnabled(this) ? R.string.extras_on : R.string.extras_off);
     }
 
     private void setButtonsEnabled(boolean enabled) {
-        for (Button button : new Button[] {startButton, pickButton, languageButton, newsButton, exportButton, importButton}) {
+        for (Button button : new Button[] {startButton, pickButton, languageButton, extrasButton, exportButton, importButton}) {
             button.setEnabled(enabled);
         }
     }
@@ -282,8 +282,9 @@ public class ImportActivity extends Activity {
         return -1;
     }
 
-    static boolean isNewsEnabled(Context context) {
-        return context.getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_NEWS, true);
+    /** Additional game rules of the free game: events, two start gates, sabotage by mood. */
+    static boolean areExtrasEnabled(Context context) {
+        return context.getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_EXTRAS, true);
     }
 
     private String languageName() {
@@ -586,8 +587,15 @@ public class ImportActivity extends Activity {
             status.setText(getString(R.string.import_failed, String.valueOf(e.getMessage())));
             return;
         }
-        // headlines for the kiosk; the game reads them at the start of each game day
-        NewsFetcher.refreshAsync(dataDir, getLanguage(this), isNewsEnabled(this));
+        // left over from a test version that showed real-world headlines
+        File oldNews = new File(dataDir, "news.txt");
+        if (oldNews.exists() && !oldNews.delete()) {
+            Log.w(TAG, "could not remove " + oldNews);
+        }
+        File oldMarker = new File(dataDir, "news.txt.lang");
+        if (oldMarker.exists() && !oldMarker.delete()) {
+            Log.w(TAG, "could not remove " + oldMarker);
+        }
         startActivity(new Intent(this, ATActivity.class));
         finish();
     }

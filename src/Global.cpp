@@ -157,6 +157,11 @@ SLONG nWaitingForPlayer = 0;      // Müssen wir da auf einen anderen Spieler wa
 SLONG nAppsDisabled = 0;          // Ist ein anderer Spieler gerade in einer anderen Anwendung?
 BOOL bTwoWins;                    // SplitScreen Testen?
 SLONG Editor;                     // Ist der Flughafeneditor aktiv ? (=0)
+#ifdef __ANDROID__
+bool gGameplayExtras = true; // can be switched off in the launcher ("/noextras")
+#else
+bool gGameplayExtras = false; // "/extras" switches them on
+#endif
 BOOL gDisablePauseKey;            // Pause-Key für Texteingabe abgeschaltet?
 BOOL bgJustDidLotsOfWork = FALSE; // Gegen Sprünge nach Load/Save
 BOOL bLeaveGameLoop = FALSE;      // Hauptschleife verlassen?

@@ -39,13 +39,27 @@ savegame slot, which the options menu does not list.
 Long-press the app icon and choose "Settings":
 
 - Game language (follows the device language by default)
-- Real headlines in the kiosk: titles from the RSS feed of tagesschau.de (German) or BBC News
-  (other languages) are added to free lines of the newspapers. This is the only use of the
-  network and can be switched off.
+- Extra rules in the free game (on by default, see below)
 - Export and import of savegames as a ZIP
 
 The game is saved to the autosave slot whenever the app goes to the background, because
 Android may end background apps at any time.
+
+## Extra rules in the free game
+
+These change the game itself and are therefore optional (`/extras` and `/noextras` on the
+command line; on by default only on Android). They do not apply to missions and network games.
+
+- **Two gates at the start:** every airline starts with two gates. The airport is then at its
+  largest size (8 gates) from the first day, so there are no gate auctions and no expansions.
+- **Events:** holidays (flight orders pay a quarter more), trade fairs (more and better paid
+  orders to one city), kerosene price jumps in both directions and storms (many more
+  breakdowns of planes without the best equipment). At most one event in six days. They follow
+  from the start time of the game alone, so savegames are unaffected.
+- **Newspapers:** announce each event one day ahead and report the kerosene price trend.
+- **Sabotage by mood:** computer players sabotage the airline they like least, never a random
+  one; the worse the relationship, the nastier the jobs. They also strike back at the human
+  player once they dislike them enough, at every difficulty level.
 
 ## Limitations
 

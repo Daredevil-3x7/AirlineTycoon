@@ -485,7 +485,7 @@ Bot::Prio Bot::condSabotage(__int64 &moneyAvailable) {
     if (!hoursPassed(ACTION_SABOTAGE, 24)) {
         return Prio::None;
     }
-    if (!qPlayer.RobotUse(ROBOT_USE_MUCH_SABOTAGE) && !qPlayer.RobotUse(ROBOT_USE_EXTREME_SABOTAGE)) {
+    if (!sabotageAllowed()) {
         return Prio::None;
     }
     if (qPlayer.ArabTrust == 0) {
@@ -494,7 +494,7 @@ Bot::Prio Bot::condSabotage(__int64 &moneyAvailable) {
     if (mNeedToShutdownSecurity) {
         return Prio::None;
     }
-    if (mNemesis == -1) {
+    if (getSabotageVictim() == -1) {
         return Prio::None;
     }
 

@@ -38,6 +38,24 @@ void LoadLBMPalette(const char *Filename, SDL_Color *Palette);
 // GameFrame.Cpp:
 //--------------------------------------------------------------------------------------------
 void MessagePump(void);
+// GameEvents.cpp: optional events in the free game (see gGameplayExtras)
+enum ATEventType { ATEVENT_NONE, ATEVENT_HOLIDAY, ATEVENT_FAIR, ATEVENT_KEROSIN_UP, ATEVENT_KEROSIN_DOWN, ATEVENT_STORM };
+struct ATGameEvent {
+    SLONG type{ATEVENT_NONE};
+    SLONG start{0}; // first day
+    SLONG days{0};
+    SLONG city{-1}; // index into Cities (ATEVENT_FAIR)
+};
+bool AtExtrasActive(void);
+bool AtEventOnDay(SLONG day, ATGameEvent &event);
+bool AtEventStartingOn(SLONG day, ATGameEvent &event);
+bool AtEventStormToday(void);
+void AtEventsNewDay(void);
+void AtEventAdjustOrderCities(ULONG &VonCity, ULONG &NachCity, TEAKRAND *pRandom);
+SLONG AtEventAdjustPremium(SLONG Praemie, ULONG VonCity, ULONG NachCity);
+CString AtEventHeadline(const ATGameEvent &event, bool announcement);
+CString AtKerosinHeadline(void);
+
 extern bool gMainLoopPump; // MessagePump() is being called by the main loop, not from inside a room or a loading screen
 void AtSaveOnBackground(void);
 bool AtQuickSave(void); // slot 12, which the options menu does not show

@@ -165,6 +165,7 @@ extern SLONG nAppsDisabled;      // Ist ein anderer Spieler gerade in einer ande
 extern SLONG nWaitingForPlayer;  // Müssen wir da auf einen anderen Spieler warten?
 extern BOOL bTwoWins;            // SplitScreen Testen?
 extern SLONG Editor;             // Ist der Flughafeneditor aktiv ? (=0)
+extern bool gGameplayExtras;     // Additional game rules: events, two start gates, sabotage by mood
 extern BOOL gDisablePauseKey;    // Pause-Key für Texteingabe abgeschaltet?
 extern BOOL bgJustDidLotsOfWork; // Gegen Sprünge nach Load/Save
 extern BOOL bLeaveGameLoop;      // Hauptschleife verlassen?

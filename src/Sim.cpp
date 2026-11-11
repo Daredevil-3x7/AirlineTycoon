@@ -603,6 +603,10 @@ void SIM::ChooseStartup() {
     gDisablePauseKey = FALSE;
 
     LeftEnd = CheckIn = Office = Entry = Shops = Cafe = Security = Suitcase = WaitZone = RightEnd = 1;
+    if (AtExtrasActive()) {
+        // Every airline starts with two gates. That needs the largest airport (see ValidateStartGates)
+        CheckIn = WaitZone = Suitcase = 5;
+    }
 
     bNoTime = TRUE;
     Time = 9 * 60000;
@@ -725,6 +729,9 @@ void SIM::ChooseStartup() {
         }
 
         qPlayer.RentGate(c, 1000);
+        if (AtExtrasActive()) {
+            qPlayer.RentGate(4 + c, 1000);
+        }
 
         // Statussymbole:
         qPlayer.KerosinQuali = 1.0;
@@ -1178,7 +1185,7 @@ void SIM::ChooseStartup() {
     Headlines.ReloadHeadline();
     Headlines.InterpolateHeadline(); // Variablen ersetzen
     Headlines.ComparisonHeadlines(); // Variablen ersetzen
-    Headlines.AddRealNews();
+    Headlines.AddGameNews();
     CreateRandomUsedPlanes();
 
     DumpAASeedSum(1002);
@@ -1885,7 +1892,7 @@ void SIM::DoTimeStep() {
                                 }
 
                                 // Unfälle wegen Jahreszeit:
-                                if (LocalRand.Rand(5000) > 4980) {
+                                if (LocalRand.Rand(5000) > (AtEventStormToday() ? 4800 : 4980)) {
                                     bool bCanHappenToThisPlane = false;
 
                                     switch (GetSeason()) {
@@ -2477,6 +2484,7 @@ void SIM::NewDay() {
     }
 
     Limit(SLONG(300), Kerosin, SLONG(700));
+    AtEventsNewDay(); // optional events: price shocks, message about the event of the day
     KerosinPast[9] = Kerosin;
 
     for (c = 0; c < Players.AnzPlayers; c++) {
@@ -2503,7 +2511,7 @@ void SIM::NewDay() {
     Headlines.ReloadHeadline();
     Headlines.InterpolateHeadline();
     Headlines.SortByPriority();
-    Headlines.AddRealNews();
+    Headlines.AddGameNews();
 
     // Gates, Cities und Routen versteigern:
     {
@@ -2762,6 +2770,25 @@ void SIM::UpdateUsedPlanes() {
     if (Difficulty == DIFF_ATFS10 && Date >= 40 && Date <= 50) {
         for (c = 0; c < SLONG(UsedPlanes.AnzEntries()); c++) {
             UsedPlanes[0x1000000 + c].Name = "";
+        }
+    }
+}
+
+//--------------------------------------------------------------------------------------------
+// Die Gates werden ggf. vertauscht um in der perfekten Reihenfolge zu sein:
+//--------------------------------------------------------------------------------------------
+// Releases gates that the loaded airport does not have (see the two start gates in ChooseStartup)
+//--------------------------------------------------------------------------------------------
+void SIM::ValidateStartGates() {
+    const SLONG capacity = Airport.GetNumberOfShops(RUNE_2WAIT);
+
+    for (SLONG c = 0; c < Players.Players.AnzEntries(); c++) {
+        auto &qGates = Players.Players[c].Gates;
+        for (SLONG d = qGates.Gates.AnzEntries() - 1; d >= 0; d--) {
+            if (qGates.Gates[d].Miete != -1 && qGates.Gates[d].Nummer >= capacity) {
+                qGates.Gates[d].Miete = -1;
+                qGates.NumRented--;
+            }
         }
     }
 }

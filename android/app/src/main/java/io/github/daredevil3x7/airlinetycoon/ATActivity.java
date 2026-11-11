@@ -35,14 +35,18 @@ public class ATActivity extends SDLActivity {
         return new String[] {"c++_shared", "SDL2", "SDL2_image", "SDL2_mixer", "SDL2_ttf", "main"};
     }
 
-    /** Command line of the game: the language chosen in the launcher, if any. */
+    /** Command line of the game: the settings made in the launcher. */
     @Override
     protected String[] getArguments() {
+        java.util.ArrayList<String> arguments = new java.util.ArrayList<>();
         int language = ImportActivity.getLanguage(this);
         if (language >= 0) {
-            return new String[] {"/lang=" + language};
+            arguments.add("/lang=" + language);
         }
-        return new String[0];
+        if (!ImportActivity.areExtrasEnabled(this)) {
+            arguments.add("/noextras");
+        }
+        return arguments.toArray(new String[0]);
     }
 
     @Override

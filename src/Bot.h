@@ -274,6 +274,9 @@ class Bot {
     /* in BotFunctions.cpp */
     void grabNewFlights();
     __int64 getNemesisScore(SLONG p) const;
+    SLONG getMoodVictim() const;     /* optional rules: the airline we like least, if we dislike one */
+    SLONG getSabotageVictim() const; /* mood victim, else the nemesis */
+    bool sabotageAllowed() const;
     void determineNemesis();
     void switchToFinalTarget(bool areWeInOffice);
     std::vector<SLONG> findBestAvailablePlaneType();

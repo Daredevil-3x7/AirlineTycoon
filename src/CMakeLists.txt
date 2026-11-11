@@ -105,6 +105,7 @@ set(AT_SOURCES
     Lastmin.cpp
     Mainfrm.cpp
     Makler.cpp
+    GameEvents.cpp
     Misc.cpp
     Museum.cpp
     Nasa.cpp

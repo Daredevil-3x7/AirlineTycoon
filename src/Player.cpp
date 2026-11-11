@@ -4286,6 +4286,17 @@ void PLAYER::RobotExecuteAction() {
         } else {
             LocalRandom.Rand(2); // Sicherheitshalber, damit wir immer genau ein Random ausführen
         }
+        if (AtExtrasActive()) {
+            // Sabotage by mood: the airline this one likes least is the target, nobody else
+            SLONG worst = 0;
+            dislike = -1;
+            for (c = 0; c < 4; c++) {
+                if (c != PlayerNum && (Sim.Players.Players[c].IsOut == 0) && Sympathie[c] < worst) {
+                    worst = Sympathie[c];
+                    dislike = c;
+                }
+            }
+        }
         TargetedPlayer = dislike;
     }
 
@@ -4813,7 +4824,8 @@ void PLAYER::RobotExecuteAction() {
     } break;
 
     case ACTION_SABOTAGE:
-        if (dislike == -1 && (RobotUse(ROBOT_USE_EXTREME_SABOTAGE) || RobotUse(ROBOT_USE_EXTRA_SABOTAGE) || LocalRandom.Rand(3) == 0)) {
+        if (dislike == -1 && !AtExtrasActive() &&
+            (RobotUse(ROBOT_USE_EXTREME_SABOTAGE) || RobotUse(ROBOT_USE_EXTRA_SABOTAGE) || LocalRandom.Rand(3) == 0)) {
             dislike = LocalRandom.Rand(4);
             if (RobotUse(ROBOT_USE_EXTREME_SABOTAGE) && (dislike == PlayerNum || (Sim.Players.Players[dislike].IsOut != 0))) {
                 SLONG r = -9999; // Besten Spieler als Sabotageziel wählen:
@@ -4838,7 +4850,14 @@ void PLAYER::RobotExecuteAction() {
                  (RobotUse(ROBOT_USE_EXTRA_SABOTAGE) && LocalRandom.Rand(2) == 0)) &&
                 dislike != -1 && dislike != PlayerNum &&
                 (ArabHints < 80 || (ArabHints < 90 && Credit < 1000000 && Money > 3000000 && RobotUse(ROBOT_USE_SABO_AFFORD_FINE) && (Sim.Date & 3) == 0)) &&
-                (Sim.Players.Players[dislike].Owner == 1 || RobotUse(ROBOT_USE_MUCH_SABOTAGE))) {
+                (Sim.Players.Players[dislike].Owner == 1 || RobotUse(ROBOT_USE_MUCH_SABOTAGE) || (AtExtrasActive() && Sympathie[dislike] < -40))) {
+
+                // Sabotage by mood: the worse the relationship, the nastier the jobs
+                SLONG moodCap = 5;
+                if (AtExtrasActive()) {
+                    const SLONG mood = Sympathie[dislike];
+                    moodCap = (mood > -30) ? 1 : (mood > -60) ? 2 : (mood > -100) ? 3 : 5;
+                }
 
                 SLONG SecurityAnnoiance = 0;
                 SLONG targetMode = 0;
@@ -4850,7 +4869,7 @@ void PLAYER::RobotExecuteAction() {
                     switch (Sim.GetHour() % 3) {
                     case 0:
                         if (Sim.Players.Players[dislike].Planes.GetNumUsed() > 0) {
-                            targetMode = min(4, ArabTrust);
+                            targetMode = min(moodCap, min(4, ArabTrust));
                             if (pass > 2 && targetMode > 0) {
                                 targetMode = LocalRandom.Rand(targetMode);
                             }
@@ -4875,7 +4894,7 @@ void PLAYER::RobotExecuteAction() {
                         break;
 
                     case 1:
-                        targetMode = min(4, ArabTrust);
+                        targetMode = min(moodCap, min(4, ArabTrust));
                         if (pass > 2 && targetMode > 0) {
                             targetMode = LocalRandom.Rand(targetMode);
                         }
@@ -4905,7 +4924,7 @@ void PLAYER::RobotExecuteAction() {
 
                     case 2:
                         if (Sim.Players.Players[dislike].Planes.GetNumUsed() > 0) {
-                            targetMode = min(5, ArabTrust);
+                            targetMode = min(moodCap, min(5, ArabTrust));
                             if (pass > 2 && targetMode > 0) {
                                 targetMode = LocalRandom.Rand(targetMode);
                             }

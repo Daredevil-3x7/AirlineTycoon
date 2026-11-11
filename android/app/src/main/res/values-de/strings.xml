@@ -14,8 +14,8 @@
     <string name="settings_intro">Einstellungen der Android-Version. Änderungen gelten ab dem nächsten Start des Spiels.</string>
     <string name="settings_start">Spiel starten</string>
     <string name="import_pick_again">Spieldateien neu importieren (ZIP)</string>
-    <string name="news_on">Echte Schlagzeilen im Kiosk: an (tagesschau.de / BBC News)</string>
-    <string name="news_off">Echte Schlagzeilen im Kiosk: aus</string>
+    <string name="extras_on">Zusatzregeln im freien Spiel: an (Events, zwei Start-Gates, Sabotage nach Stimmung)</string>
+    <string name="extras_off">Zusatzregeln im freien Spiel: aus (Originalregeln)</string>
     <string name="saves_export">Spielstände exportieren (ZIP)</string>
     <string name="saves_import">Spielstände importieren (ZIP)</string>
     <string name="saves_exported">%1$d Spielstand-Dateien exportiert.</string>

@@ -16,8 +16,8 @@
     <string name="settings_intro">Settings of the Android version. Changes take effect at the next start of the game.</string>
     <string name="settings_start">Start game</string>
     <string name="import_pick_again">Import game files again (ZIP)</string>
-    <string name="news_on">Real headlines in the kiosk: on (tagesschau.de / BBC News)</string>
-    <string name="news_off">Real headlines in the kiosk: off</string>
+    <string name="extras_on">Extra rules in the free game: on (events, two start gates, sabotage by mood)</string>
+    <string name="extras_off">Extra rules in the free game: off (original rules)</string>
     <string name="saves_export">Export savegames (ZIP)</string>
     <string name="saves_import">Import savegames (ZIP)</string>
     <string name="saves_exported">%1$d savegame files exported.</string>
