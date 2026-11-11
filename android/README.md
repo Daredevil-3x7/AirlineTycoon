@@ -24,7 +24,7 @@ Savegames, settings (`AT.json`) and the log (`debug.txt`) are stored in the same
 | Double tap | Double click |
 | Drag | Hold the left button and move |
 | Long press, two-finger tap or Back button | Right click (leave room, close menu) |
-| Three-finger tap | Show / hide the keyboard |
+| Three-finger tap | Show / hide the keyboard (it opens by itself for savegame and player names) |
 
 A mouse and a keyboard connected to the device work as on the desktop.
 

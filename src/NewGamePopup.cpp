@@ -309,6 +309,7 @@ void NewGamePopup::Konstruktor(BOOL /*bHandy*/, SLONG /*PlayerNum*/) {
 //--------------------------------------------------------------------------------------------
 NewGamePopup::~NewGamePopup() {
     SLONG c = 0;
+    AtSetTextEntry(1, false);
     if (TimerId != 0) {
         SDL_RemoveTimer(TimerId);
     }
@@ -855,6 +856,7 @@ void NewGamePopup::CheckNames() {
 // NewGamePopup::OnPaint
 //--------------------------------------------------------------------------------------------
 void NewGamePopup::OnPaint() {
+    AtSetTextEntry(1, CursorY != -1); // player and airline name
     static SLONG x;
     static SLONG y;
     static SLONG py;

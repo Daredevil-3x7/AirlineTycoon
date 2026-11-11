@@ -26,6 +26,10 @@
 #include <SDL.h>
 #include <SDL_hints.h>
 
+#ifdef __ANDROID__
+#include <deque>
+#endif
+
 extern SBNetwork gNetwork;
 
 #ifdef _DEBUG
@@ -122,19 +126,35 @@ void CheatSound() {
 #ifdef __ANDROID__
 //--------------------------------------------------------------------------------------------
 // Touch input (Android). The game expects a mouse with two buttons:
-//   tap                -> left click (sent when the finger is lifted)
+//   tap                -> left click
 //   double tap         -> double click
 //   drag               -> left button held while moving
 //   long press         -> right click (leaves rooms, closes menus, removes entries)
 //   two-finger tap     -> right click
 //   three-finger tap   -> show / hide the on-screen keyboard
 //   Back button        -> right click at the last position
+//
+// Touches are turned into regular SDL mouse events and sent through ProcessEvent(), because
+// the rooms read the type of the current event (FrameWnd->Mess). The game works out what is
+// under the cursor while it paints a frame, so a click is only sent after the cursor has been
+// at its position for a moment.
 //--------------------------------------------------------------------------------------------
 namespace {
-constexpr Uint32 kLongPressMs = 550;
-constexpr Uint32 kDoubleTapMs = 350;
-constexpr Uint32 kClickHoldMs = 60;
+constexpr Uint32 kLongPressMs = 600;
+constexpr Uint32 kDoubleTapMs = 400;
+constexpr Uint32 kHoverMs = 70;     // cursor rests this long before the button goes down
+constexpr Uint32 kClickHoldMs = 70; // button stays down this long
+constexpr SLONG kMinPumps = 3;      // and at least this many message pumps pass in between
 constexpr SLONG kDragDistance = 16; // in game pixels (640x480)
+
+enum class TouchAction { LeftDown, LeftDblClk, LeftUp, RightDown, RightUp };
+
+struct TouchPending {
+    TouchAction action;
+    SLONG x;
+    SLONG y;
+    Uint32 delay; // after the previous action
+};
 
 struct TouchState {
     SLONG fingers{0};
@@ -143,78 +163,187 @@ struct TouchState {
     bool dragging{false};
     bool consumed{false};
     bool multi{false};
-    CPoint start{0, 0};
-    CPoint last{0, 0};
+    SLONG startX{0}, startY{0}; // window pixels
+    SLONG lastX{0}, lastY{0};
     Uint32 downTime{0};
 
-    bool pendingLUp{false};
-    Uint32 pendingLUpAt{0};
-    CPoint pendingPos{0, 0};
+    std::deque<TouchPending> queue;
+    Uint32 queueReadyAt{0};
+    SLONG queuePumpMark{0};
+    SLONG pumps{0};
 
     Uint32 lastTapTime{0};
-    CPoint lastTapPos{0, 0};
+    SLONG lastTapX{0}, lastTapY{0};
+    bool touchInUse{false}; // the last pointer input came from a finger, not from a real mouse
 } gTouch;
 
-CPoint TouchToGame(const SDL_TouchFingerEvent &finger) {
-    SLONG screenW = 0;
-    SLONG screenH = 0;
-    SDL_GetRendererOutputSize(SDL_GetRenderer(FrameWnd->m_hWnd), &screenW, &screenH);
-    CPoint pos(static_cast<SLONG>(finger.x * static_cast<FLOAT>(screenW)), static_cast<SLONG>(finger.y * static_cast<FLOAT>(screenH)));
-    FrameWnd->TranslatePointToGameSpace(&pos);
-    return pos;
-}
-
-bool IsNear(const CPoint &a, const CPoint &b, SLONG distance) { return abs(a.x - b.x) <= distance && abs(a.y - b.y) <= distance; }
-
-void TouchFlushPendingUp() {
-    if (gTouch.pendingLUp) {
-        gTouch.pendingLUp = false;
-        FrameWnd->OnLButtonUp(WM_LBUTTONUP, gTouch.pendingPos);
+void TouchOutputSize(SLONG &w, SLONG &h) {
+    w = 0;
+    h = 0;
+    SDL_GetRendererOutputSize(SDL_GetRenderer(FrameWnd->m_hWnd), &w, &h);
+    if (w <= 0 || h <= 0) {
+        w = 640;
+        h = 480;
     }
 }
 
-void TouchRightClick(CPoint pos) {
-    TouchFlushPendingUp();
-    FrameWnd->OnMouseMove(0, pos);
-    FrameWnd->OnRButtonDown(WM_RBUTTONDOWN, pos);
-    FrameWnd->OnRButtonUp(WM_RBUTTONUP, pos);
+void TouchDispatch(const SDL_Event &ev) {
+    FrameWnd->Mess = ev;
+    FrameWnd->ProcessEvent(FrameWnd->Mess);
 }
 
-void TouchTap(CPoint pos) {
+void TouchSendMotion(SLONG x, SLONG y) {
+    SDL_Event ev;
+    SDL_zero(ev);
+    ev.type = SDL_MOUSEMOTION;
+    ev.motion.timestamp = SDL_GetTicks();
+    ev.motion.windowID = SDL_GetWindowID(FrameWnd->m_hWnd);
+    ev.motion.which = SDL_TOUCH_MOUSEID;
+    ev.motion.x = x;
+    ev.motion.y = y;
+    TouchDispatch(ev);
+}
+
+void TouchSendButton(TouchAction action, SLONG x, SLONG y) {
+    const bool down = (action == TouchAction::LeftDown || action == TouchAction::LeftDblClk || action == TouchAction::RightDown);
+    const bool right = (action == TouchAction::RightDown || action == TouchAction::RightUp);
+    SDL_Event ev;
+    SDL_zero(ev);
+    ev.type = down ? SDL_MOUSEBUTTONDOWN : SDL_MOUSEBUTTONUP;
+    ev.button.timestamp = SDL_GetTicks();
+    ev.button.windowID = SDL_GetWindowID(FrameWnd->m_hWnd);
+    ev.button.which = SDL_TOUCH_MOUSEID;
+    ev.button.button = right ? SDL_BUTTON_RIGHT : SDL_BUTTON_LEFT;
+    ev.button.state = down ? SDL_PRESSED : SDL_RELEASED;
+    ev.button.clicks = (action == TouchAction::LeftDblClk) ? 2 : 1;
+    ev.button.x = x;
+    ev.button.y = y;
+    TouchDispatch(ev);
+}
+
+void TouchEnqueue(TouchAction action, SLONG x, SLONG y, Uint32 delay) {
+    if (gTouch.queue.empty()) {
+        gTouch.queueReadyAt = SDL_GetTicks() + delay;
+        gTouch.queuePumpMark = gTouch.pumps;
+    }
+    gTouch.queue.push_back(TouchPending{action, x, y, delay});
+}
+
+// Sends everything that is still waiting, in order and without further delay
+void TouchFlushQueue() {
+    while (!gTouch.queue.empty()) {
+        const TouchPending p = gTouch.queue.front();
+        gTouch.queue.pop_front();
+        TouchSendButton(p.action, p.x, p.y);
+    }
+}
+
+void TouchRunQueue() {
+    while (!gTouch.queue.empty()) {
+        const Uint32 now = SDL_GetTicks();
+        if (!SDL_TICKS_PASSED(now, gTouch.queueReadyAt) || gTouch.pumps - gTouch.queuePumpMark < kMinPumps) {
+            return;
+        }
+        const TouchPending p = gTouch.queue.front();
+        gTouch.queue.pop_front();
+        TouchSendButton(p.action, p.x, p.y);
+        if (!gTouch.queue.empty()) {
+            gTouch.queueReadyAt = SDL_GetTicks() + gTouch.queue.front().delay;
+            gTouch.queuePumpMark = gTouch.pumps;
+        }
+    }
+}
+
+void TouchRightClick(SLONG x, SLONG y) {
+    TouchFlushQueue();
+    TouchSendMotion(x, y);
+    TouchEnqueue(TouchAction::RightDown, x, y, kHoverMs);
+    TouchEnqueue(TouchAction::RightUp, x, y, kClickHoldMs);
+}
+
+void TouchTap(SLONG x, SLONG y) {
+    SLONG w = 0;
+    SLONG h = 0;
+    TouchOutputSize(w, h);
+    const SLONG slop = kDragDistance * 2 * h / 480;
     const Uint32 now = SDL_GetTicks();
-    TouchFlushPendingUp();
-    FrameWnd->OnMouseMove(0, pos);
-    if (gTouch.lastTapTime != 0 && now - gTouch.lastTapTime <= kDoubleTapMs && IsNear(pos, gTouch.lastTapPos, kDragDistance)) {
-        FrameWnd->OnLButtonDblClk(WM_LBUTTONDBLCLK, pos);
-        gTouch.lastTapTime = 0;
-    } else {
-        FrameWnd->OnLButtonDown(WM_LBUTTONDOWN, pos);
-        gTouch.lastTapTime = now;
-        gTouch.lastTapPos = pos;
-    }
-    // release the button a few frames later, so that code polling the button state sees it
-    gTouch.pendingLUp = true;
-    gTouch.pendingLUpAt = now + kClickHoldMs;
-    gTouch.pendingPos = pos;
+    const bool isDouble = gTouch.lastTapTime != 0 && now - gTouch.lastTapTime <= kDoubleTapMs && abs(x - gTouch.lastTapX) <= slop && abs(y - gTouch.lastTapY) <= slop;
+
+    TouchFlushQueue();
+    TouchSendMotion(x, y);
+    TouchEnqueue(isDouble ? TouchAction::LeftDblClk : TouchAction::LeftDown, x, y, kHoverMs);
+    TouchEnqueue(TouchAction::LeftUp, x, y, kClickHoldMs);
+
+    gTouch.lastTapTime = isDouble ? 0 : now;
+    gTouch.lastTapX = x;
+    gTouch.lastTapY = y;
 }
 
-// Called once per message pump: delayed button release and long press detection
+// The arrows at the left and right edge of the airport scroll the view while the cursor is on them
+bool TouchOnScrollArrow() { return ::MouseClickId == 6010 || ::MouseClickId == 6011; }
+
+// Called once per message pump: delayed clicks and long press detection
 void TouchTick() {
+    gTouch.pumps++;
+    TouchRunQueue();
+
     const Uint32 now = SDL_GetTicks();
-    if (gTouch.pendingLUp && SDL_TICKS_PASSED(now, gTouch.pendingLUpAt)) {
-        TouchFlushPendingUp();
-    }
     if (gTouch.active && !gTouch.dragging && !gTouch.consumed && !gTouch.multi && now - gTouch.downTime >= kLongPressMs) {
         gTouch.consumed = true;
-        TouchRightClick(gTouch.last);
+        // Resting a finger on a scroll arrow scrolls the airport; a right click would jump back
+        if (!TouchOnScrollArrow()) {
+            TouchRightClick(gTouch.lastX, gTouch.lastY);
+        }
+    }
+
+    // A mouse would be moved away again; without a finger the cursor has to leave the arrow by itself
+    if (gTouch.touchInUse && !gTouch.active && gTouch.queue.empty() && TouchOnScrollArrow()) {
+        SLONG w = 0;
+        SLONG h = 0;
+        TouchOutputSize(w, h);
+        TouchSendMotion(w / 2, h / 2);
     }
 }
 
 // Returns true if the event was handled here
-bool TouchHandleEvent(const SDL_Event &event) {
+bool TouchHandleEvent(const SDL_Event &eventIn) {
+    switch (eventIn.type) {
+    case SDL_MOUSEMOTION:
+    case SDL_MOUSEBUTTONDOWN:
+        // same position in the union for both event types
+        if (eventIn.motion.which != SDL_TOUCH_MOUSEID) {
+            gTouch.touchInUse = false;
+        }
+        return false;
+    case SDL_FINGERDOWN:
+    case SDL_FINGERMOTION:
+    case SDL_FINGERUP:
+        gTouch.touchInUse = true;
+        break;
+    case SDL_APP_WILLENTERBACKGROUND:
+    case SDL_APP_DIDENTERFOREGROUND:
+    case SDL_KEYDOWN:
+    case SDL_KEYUP:
+        break;
+    default:
+        return false;
+    }
+
+    // eventIn is FrameWnd->Mess, which TouchDispatch() overwrites
+    const SDL_Event event = eventIn;
+
+    SLONG w = 0;
+    SLONG h = 0;
+    SLONG x = 0;
+    SLONG y = 0;
+    TouchOutputSize(w, h);
+    if (event.type == SDL_FINGERDOWN || event.type == SDL_FINGERMOTION || event.type == SDL_FINGERUP) {
+        x = static_cast<SLONG>(event.tfinger.x * static_cast<FLOAT>(w));
+        y = static_cast<SLONG>(event.tfinger.y * static_cast<FLOAT>(h));
+    }
+
     switch (event.type) {
     case SDL_FINGERDOWN: {
-        const CPoint pos = TouchToGame(event.tfinger);
         gTouch.fingers++;
         if (gTouch.fingers == 1 || !gTouch.active) {
             gTouch.fingers = 1;
@@ -223,11 +352,11 @@ bool TouchHandleEvent(const SDL_Event &event) {
             gTouch.dragging = false;
             gTouch.consumed = false;
             gTouch.multi = false;
-            gTouch.start = pos;
-            gTouch.last = pos;
+            gTouch.startX = gTouch.lastX = x;
+            gTouch.startY = gTouch.lastY = y;
             gTouch.downTime = SDL_GetTicks();
-            TouchFlushPendingUp();
-            FrameWnd->OnMouseMove(0, pos);
+            TouchFlushQueue();
+            TouchSendMotion(x, y);
         } else if (gTouch.fingers == 2) {
             if (!gTouch.dragging && !gTouch.consumed) {
                 gTouch.multi = true;
@@ -249,31 +378,31 @@ bool TouchHandleEvent(const SDL_Event &event) {
         if (!gTouch.active || event.tfinger.fingerId != gTouch.primary || gTouch.consumed || gTouch.multi) {
             return true;
         }
-        const CPoint pos = TouchToGame(event.tfinger);
-        gTouch.last = pos;
-        if (!gTouch.dragging && !IsNear(pos, gTouch.start, kDragDistance)) {
+        gTouch.lastX = x;
+        gTouch.lastY = y;
+        const SLONG slop = kDragDistance * h / 480;
+        if (!gTouch.dragging && (abs(x - gTouch.startX) > slop || abs(y - gTouch.startY) > slop)) {
             gTouch.dragging = true;
-            TouchFlushPendingUp();
-            FrameWnd->OnMouseMove(0, gTouch.start);
-            FrameWnd->OnLButtonDown(WM_LBUTTONDOWN, gTouch.start);
+            TouchFlushQueue();
+            TouchSendMotion(gTouch.startX, gTouch.startY);
+            TouchSendButton(TouchAction::LeftDown, gTouch.startX, gTouch.startY);
         }
-        FrameWnd->OnMouseMove(0, pos);
+        TouchSendMotion(x, y);
         return true;
     }
     case SDL_FINGERUP: {
         gTouch.fingers = max(0, gTouch.fingers - 1);
         if (gTouch.active && event.tfinger.fingerId == gTouch.primary) {
-            const CPoint pos = TouchToGame(event.tfinger);
             gTouch.active = false;
             if (gTouch.dragging) {
-                FrameWnd->OnMouseMove(0, pos);
-                FrameWnd->OnLButtonUp(WM_LBUTTONUP, pos);
+                TouchSendMotion(x, y);
+                TouchSendButton(TouchAction::LeftUp, x, y);
             } else if (gTouch.consumed) {
-                // long press or keyboard gesture already handled
+                // long press or keyboard gesture, already handled
             } else if (gTouch.multi) {
-                TouchRightClick(gTouch.start);
+                TouchRightClick(gTouch.startX, gTouch.startY);
             } else {
-                TouchTap(pos);
+                TouchTap(x, y);
             }
         }
         if (gTouch.fingers == 0) {
@@ -283,14 +412,18 @@ bool TouchHandleEvent(const SDL_Event &event) {
     }
     case SDL_APP_WILLENTERBACKGROUND:
     case SDL_APP_DIDENTERFOREGROUND:
-        TouchFlushPendingUp();
+        TouchFlushQueue();
+        if (gTouch.dragging) {
+            TouchSendButton(TouchAction::LeftUp, gTouch.lastX, gTouch.lastY);
+        }
         gTouch.fingers = 0;
         gTouch.active = false;
+        gTouch.dragging = false;
         return false;
     case SDL_KEYDOWN:
         if (event.key.keysym.sym == SDLK_AC_BACK) {
             if (event.key.repeat == 0) {
-                TouchRightClick(gTouch.last);
+                TouchRightClick(gTouch.lastX, gTouch.lastY);
             }
             return true;
         }
@@ -303,6 +436,28 @@ bool TouchHandleEvent(const SDL_Event &event) {
 }
 } // namespace
 #endif
+
+//--------------------------------------------------------------------------------------------
+// Rooms report whether one of their text fields is being edited (source: 0=options, 1=new game).
+// On Android this shows and hides the on-screen keyboard; elsewhere it does nothing.
+//--------------------------------------------------------------------------------------------
+void AtSetTextEntry(SLONG source, bool wanted) {
+#ifdef __ANDROID__
+    static bool state[4] = {false, false, false, false};
+    if (source < 0 || source >= 4 || state[source] == wanted) {
+        return;
+    }
+    state[source] = wanted;
+    if (wanted) {
+        SDL_StartTextInput();
+    } else {
+        SDL_StopTextInput();
+    }
+#else
+    (void)source;
+    (void)wanted;
+#endif
+}
 
 void MessagePump() {
 

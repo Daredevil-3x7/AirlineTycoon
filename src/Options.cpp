@@ -91,6 +91,7 @@ Options::Options(BOOL bHandy, SLONG PlayerNum) : CStdRaum(bHandy, PlayerNum, "st
 //--------------------------------------------------------------------------------------------
 Options::~Options() {
     SLONG c = 0;
+    AtSetTextEntry(0, false);
     if (TimerId != 0) {
         SDL_RemoveTimer(TimerId);
     }
@@ -317,6 +318,7 @@ void Options::RefreshKlackerField() {
 // void Options::OnPaint():
 //--------------------------------------------------------------------------------------------
 void Options::OnPaint() {
+    AtSetTextEntry(0, CursorY != -1); // savegame name
     static SLONG x;
     static SLONG y;
     static SLONG py;

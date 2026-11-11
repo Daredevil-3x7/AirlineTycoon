@@ -38,6 +38,7 @@ void LoadLBMPalette(const char *Filename, SDL_Color *Palette);
 // GameFrame.Cpp:
 //--------------------------------------------------------------------------------------------
 void MessagePump(void);
+void AtSetTextEntry(SLONG source, bool wanted); // Android: on-screen keyboard while a text field is active
 void SetToolTip(SLONG TipId, XY Pos);
 void SetMouseLook(SLONG Look, SLONG TipId, SLONG ClickArea, SLONG ClickId, SLONG ClickPar1 = 0, SLONG ClickPar2 = 0);
 void SetMouseLook(SLONG Look, SLONG TipId, const CString &Description, SLONG ClickArea, SLONG ClickId, SLONG ClickPar1 = 0, SLONG ClickPar2 = 0);
