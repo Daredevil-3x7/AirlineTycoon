@@ -3026,6 +3026,29 @@ void CPlaner::AutoPlan(SLONG mode) {
         }
     }
 
+    if (mode == 3) {
+        /* only the orders the player has accepted already. Planes that fly routes are left
+         * alone, because planning clears the rest of a plane's schedule. */
+        std::vector<int> withoutRoutes;
+        for (int planeId : planeIds) {
+            auto &qPlan = qPlayer.Planes[planeId].Flugplan;
+            bool hasRoute = false;
+            for (SLONG d = 0; d < qPlan.Flug.AnzEntries(); d++) {
+                if (qPlan.Flug[d].ObjectType == 1) {
+                    hasRoute = true;
+                    break;
+                }
+            }
+            if (!hasRoute) {
+                withoutRoutes.push_back(planeId);
+            }
+        }
+        planeIds = withoutRoutes;
+        if (planeIds.empty()) {
+            return;
+        }
+    }
+
     if (mode == 0) {
         /* only check current plane */
         Helper::checkFlightJobs(qPlayer, true, true);
@@ -3034,7 +3057,7 @@ void CPlaner::AutoPlan(SLONG mode) {
 
     BotPlaner bot(qPlayer, qPlayer.Planes);
 
-    if (mode >= 1) {
+    if (mode == 1 || mode == 2) {
         if (Helper::checkRoomOpen(ACTION_CHECKAGENT2)) {
             bot.addJobSource(BotPlaner::JobOwner::TravelAgency, {});
         }
@@ -3045,15 +3068,82 @@ void CPlaner::AutoPlan(SLONG mode) {
             bot.addJobSource(BotPlaner::JobOwner::Freight, {});
         }
     }
-    if ((mode >= 2) && !cities.empty()) {
+    if ((mode == 2) && !cities.empty()) {
         bot.addJobSource(BotPlaner::JobOwner::International, cities);
         bot.addJobSource(BotPlaner::JobOwner::InternationalFreight, cities);
     }
-    bot.setMinScoreRatio(14 * 1000.0f);
-    bot.setMinScoreRatioLastMinute(1 * 1000.0f);
+    if (mode != 3) {
+        bot.setMinScoreRatio(14 * 1000.0f);
+        bot.setMinScoreRatioLastMinute(1 * 1000.0f);
+    }
     auto solutions = bot.generateSolution(planeIds, {}, kAvailTimeExtra);
 
     BotPlaner::takeAllJobs(qPlayer, solutions);
     BotPlaner::applySolution(qPlayer, solutions);
     Helper::checkFlightJobs(qPlayer, true, true);
+}
+
+//--------------------------------------------------------------------------------------------
+// For the touch controls: is the laptop or the globe open, and does an order stick to the cursor?
+// -1: no planner open, 0: planner open, 1: planner open and carrying an order
+//--------------------------------------------------------------------------------------------
+SLONG AtPlanerCarrying() {
+    if (Sim.localPlayer < 0 || Sim.localPlayer >= Sim.Players.Players.AnzEntries()) {
+        return -1;
+    }
+    auto *planer = dynamic_cast<CPlaner *>(Sim.Players.Players[Sim.localPlayer].LocationWin);
+    if (planer == nullptr) {
+        return -1;
+    }
+    return (planer->CurrentPostItType != 0) ? 1 : 0;
+}
+
+//--------------------------------------------------------------------------------------------
+// Schedules the orders the player has accepted on the planes without routes, using the planner
+// of the computer players. Works while the laptop or the globe is open.
+// Returns the number of orders that were scheduled, or -1 if no planner is open.
+//--------------------------------------------------------------------------------------------
+SLONG AtAutoPlanOrders() {
+    if (Sim.bNetwork != 0 || Sim.localPlayer < 0 || Sim.localPlayer >= Sim.Players.Players.AnzEntries()) {
+        return -1;
+    }
+    PLAYER &qPlayer = Sim.Players.Players[Sim.localPlayer];
+    auto *planer = dynamic_cast<CPlaner *>(qPlayer.LocationWin);
+    if (planer == nullptr || planer->IsDialogOpen() != 0 || planer->MenuIsOpen() != 0) {
+        return -1;
+    }
+
+    auto countOpen = [&qPlayer]() {
+        SLONG open = 0;
+        for (SLONG c = 0; c < qPlayer.Auftraege.AnzEntries(); c++) {
+            if (qPlayer.Auftraege.IsInAlbum(c) != 0 && qPlayer.Auftraege[c].InPlan == 0) {
+                open++;
+            }
+        }
+        for (SLONG c = 0; c < qPlayer.Frachten.AnzEntries(); c++) {
+            if (qPlayer.Frachten.IsInAlbum(c) != 0 && qPlayer.Frachten[c].InPlan == 0) {
+                open++;
+            }
+        }
+        return open;
+    };
+
+    const SLONG before = countOpen();
+    planer->CurrentPostItType = 0; // nothing may stick to the cursor while the plans change
+    planer->CurrentPostItId = -1;
+    planer->AutoPlan(3);
+    const SLONG after = countOpen();
+    qPlayer.Blocks.RepaintAll = TRUE;
+
+    CString text;
+    if (before == 0) {
+        text = AtText("Es gibt keine offenen Auftr\344ge einzuplanen.", "There are no open orders to schedule.");
+    } else if (after == 0) {
+        text = bprintf(AtText("Alle %li offenen Auftr\344ge sind eingeplant.", "All %li open orders are scheduled."), static_cast<long>(before));
+    } else {
+        text = bprintf(AtText("%li Auftr\344ge eingeplant, %li passen in keinen Flugplan. Flugzeuge mit Routen plane ich nicht um.", "%li orders scheduled, %li do not fit any schedule. I do not replan planes that fly routes."),
+                       static_cast<long>(max(0, before - after)), static_cast<long>(after));
+    }
+    qPlayer.Messages.AddMessage(BERATERTYP_GIRL, text, MESSAGE_URGENT);
+    return max(0, before - after);
 }

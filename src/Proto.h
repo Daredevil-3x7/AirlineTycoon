@@ -57,6 +57,8 @@ CString AtEventHeadline(const ATGameEvent &event, bool announcement);
 CString AtKerosinHeadline(void);
 
 const char *AtText(const char *german, const char *english);
+SLONG AtPlanerCarrying(void);
+SLONG AtAutoPlanOrders(void);
 
 // GameFinance.cpp: optional bank extensions (fixed deposit, term loan, short sales)
 class PLAYER;

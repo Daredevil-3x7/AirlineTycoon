@@ -26,13 +26,18 @@ Savegames, settings (`AT.json`) and the log (`debug.txt`) are stored in the same
 | Hold, then move if you like | Only moves the cursor: read flight orders and tooltips, scroll the airport on its arrows. Nothing is clicked. |
 | Two-finger tap, Back button or the arrow button | Right click (leave room, close menu) |
 | Tap twice on a room's exit strip | Leave the room (a single tap there does nothing) |
+| In the laptop or at the globe: press an order or a flight, drag, lift | Moves it. An order that sticks to the cursor follows the finger and is put down where the finger is lifted. |
 | Three-finger tap | Show / hide the keyboard (it opens by itself for savegame and player names) |
 | Pinch with two fingers | Zoom in and out; drag with two fingers to move the zoomed picture |
 
 On wide screens the picture is shown 20% wider than 4:3, and the bars beside it hold buttons:
-menu (Esc), quick save, quick load and keyboard on the left; zoom, faster, slower and right click
+menu (Esc), quick save, quick load, schedule and keyboard on the left; zoom, faster, slower and right click
 on the right. Quick load needs a second press within three seconds. Both use their own
 savegame slot, which the options menu does not list.
+
+The schedule button works while the laptop or the globe is open: it puts the orders that were
+accepted but not scheduled yet into the plans of the planes, using the planner of the computer
+players. Planes that fly routes are not touched.
 
 ## Settings
 

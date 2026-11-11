@@ -207,6 +207,9 @@ void ApplyView() {
 //   two-finger tap     -> right click (leaves rooms, closes menus, removes entries)
 //   three-finger tap   -> show / hide the on-screen keyboard
 //   Back button        -> right click at the last position
+//   in the flight planner (laptop, globe): press, drag and lift moves an order or a flight;
+//                         an order that sticks to the cursor follows the finger and is put
+//                         down where the finger is lifted
 //   two-finger pinch   -> zoom the picture, two-finger drag moves it while zoomed
 //   buttons in the bars left and right of the picture: menu, pause, keyboard, speed, right click
 //
@@ -219,13 +222,15 @@ namespace {
 constexpr Uint32 kPeekMs = 350;        // a finger resting this long looks instead of clicking
 constexpr Uint32 kSwipeStartMs = 250;  // a drag has to begin within this time
 constexpr Uint32 kExitConfirmMs = 1500; // second tap on a room's exit area within this time
+constexpr Uint32 kPlanerPressMs = 120;  // planner: delay before the button goes down (a second finger may still come)
 constexpr Uint32 kDoubleTapMs = 400;
 constexpr Uint32 kHoverMs = 70;     // cursor rests this long before the button goes down
 constexpr Uint32 kClickHoldMs = 70; // button stays down this long
 constexpr SLONG kMinPumps = 3;      // and at least this many message pumps pass in between
 constexpr SLONG kDragDistance = 16; // in game pixels (640x480)
 
-enum class TouchAction { LeftDown, LeftDblClk, LeftUp, RightDown, RightUp };
+// DropDown / DropUp: a click that is only sent if an order sticks to the cursor in the planner
+enum class TouchAction { LeftDown, LeftDblClk, LeftUp, RightDown, RightUp, DropDown, DropUp };
 
 struct TouchPending {
     TouchAction action;
@@ -242,6 +247,8 @@ struct TouchState {
     bool consumed{false};
     bool multi{false};
     bool peek{false};           // looking only: no click when the finger is lifted
+    SLONG mode{0};              // 0: normal, 1: planner, button follows the finger, 2: planner, carrying an order
+    bool dropSent{false};       // the DropDown of the queue was sent, so its DropUp has to follow
     Uint32 exitTapTime{0};      // first tap on a room's exit area
     SLONG startX{0}, startY{0}; // window pixels
     SLONG lastX{0}, lastY{0};
@@ -272,7 +279,7 @@ struct TouchState {
     Uint32 loadArmedUntil{0}; // quick load needs a second press within this time
 } gTouch;
 
-enum TouchButtonAction { BtnMenu, BtnPause, BtnSave, BtnLoad, BtnKeyboard, BtnZoom, BtnFaster, BtnSlower, BtnBack };
+enum TouchButtonAction { BtnMenu, BtnPause, BtnSave, BtnLoad, BtnPlan, BtnKeyboard, BtnZoom, BtnFaster, BtnSlower, BtnBack };
 
 struct TouchButton {
     SDL_Rect rect;
@@ -307,6 +314,19 @@ void TouchSendMotion(SLONG x, SLONG y) {
 }
 
 void TouchSendButton(TouchAction action, SLONG x, SLONG y) {
+    if (action == TouchAction::DropDown) {
+        gTouch.dropSent = (AtPlanerCarrying() == 1);
+        if (!gTouch.dropSent) {
+            return;
+        }
+        action = TouchAction::LeftDown;
+    } else if (action == TouchAction::DropUp) {
+        if (!gTouch.dropSent) {
+            return;
+        }
+        gTouch.dropSent = false;
+        action = TouchAction::LeftUp;
+    }
     const bool down = (action == TouchAction::LeftDown || action == TouchAction::LeftDblClk || action == TouchAction::RightDown);
     const bool right = (action == TouchAction::RightDown || action == TouchAction::RightUp);
     SDL_Event ev;
@@ -356,7 +376,7 @@ std::vector<TouchButton> TouchLayoutButtons() {
     const ATView base = GetBaseView(w, h);
     const SLONG barLeft = base.x;
     const SLONG barRight = w - (base.x + base.w);
-    const std::vector<TouchButtonAction> left = {BtnMenu, BtnSave, BtnLoad, BtnKeyboard};
+    const std::vector<TouchButtonAction> left = {BtnMenu, BtnSave, BtnLoad, BtnPlan, BtnKeyboard};
     const std::vector<TouchButtonAction> right = {BtnZoom, BtnFaster, BtnSlower, BtnBack};
 
     for (SLONG side = 0; side < 2; side++) {
@@ -367,7 +387,7 @@ std::vector<TouchButton> TouchLayoutButtons() {
         }
         const std::vector<TouchButtonAction> &actions = (side == 0) ? left : right;
         const SLONG count = static_cast<SLONG>(actions.size());
-        const SLONG size = std::min(barW * 3 / 4, h / 5);
+        const SLONG size = std::min(barW * 3 / 4, h / (count + 1));
         for (SLONG i = 0; i < count; i++) {
             const SLONG cy = h * (2 * i + 1) / (2 * count);
             buttons.push_back(TouchButton{SDL_Rect{barX + (barW - size) / 2, cy - size / 2, size, size}, actions[i]});
@@ -451,6 +471,14 @@ void TouchDrawOverlay(SDL_Renderer *renderer) {
             SDL_RenderFillRect(renderer, &shaft);
             SDL_RenderFillRect(renderer, &tray);
         } break;
+        case BtnPlan: { // schedule: three staggered bars
+            const SDL_Rect a{cx - 5 * u, cy - 4 * u, 5 * u, 2 * u};
+            const SDL_Rect b{cx - 2 * u, cy - u, 6 * u, 2 * u};
+            const SDL_Rect c{cx, cy + 2 * u, 5 * u, 2 * u};
+            SDL_RenderFillRect(renderer, &a);
+            SDL_RenderFillRect(renderer, &b);
+            SDL_RenderFillRect(renderer, &c);
+        } break;
         case BtnKeyboard: { // keyboard outline with keys
             const SDL_Rect frame{cx - 5 * u, cy - 3 * u, 10 * u, 6 * u};
             SDL_RenderDrawRect(renderer, &frame);
@@ -520,6 +548,13 @@ void TouchPressButton(TouchButtonAction action) {
             gTouch.loadArmedUntil = now + 3000;
         }
     } break;
+    case BtnPlan:
+        if (AtAutoPlanOrders() < 0 && Sim.localPlayer >= 0 && Sim.localPlayer < Sim.Players.Players.AnzEntries() &&
+            (Sim.Gamestate & 15) == GAMESTATE_PLAYING) {
+            Sim.Players.Players[Sim.localPlayer].Messages.AddMessage(
+                BERATERTYP_GIRL, AtText("Die Auftr\344ge kann ich einplanen, sobald der Laptop oder der Globus im B\374ro offen ist.", "I can schedule the orders as soon as the laptop or the globe in the office is open."), MESSAGE_URGENT);
+        }
+        break;
     case BtnKeyboard:
         if (SDL_IsTextInputActive() == SDL_TRUE) {
             SDL_StopTextInput();
@@ -719,7 +754,7 @@ void TouchTick() {
     }
 
     const Uint32 now = SDL_GetTicks();
-    if (gTouch.active && !gTouch.dragging && !gTouch.consumed && !gTouch.multi && now - gTouch.downTime >= kPeekMs) {
+    if (gTouch.active && gTouch.mode == 0 && !gTouch.dragging && !gTouch.consumed && !gTouch.multi && now - gTouch.downTime >= kPeekMs) {
         // A resting finger looks: flight orders and tooltips can be read, the airport scrolls
         // on its arrows, and nothing is clicked when the finger is lifted
         gTouch.peek = true;
@@ -815,10 +850,30 @@ bool TouchHandleEvent(const SDL_Event &eventIn) {
             gTouch.downTime = SDL_GetTicks();
             TouchFlushQueue();
             TouchSendMotion(x, y);
+
+            // Flight planner: the button goes down under the finger, unless an order sticks to
+            // the cursor already - then the finger only carries it
+            const SLONG carrying = AtPlanerCarrying();
+            gTouch.mode = (carrying < 0) ? 0 : (carrying == 1) ? 2 : 1;
+            if (gTouch.mode == 1) {
+                TouchEnqueue(TouchAction::LeftDown, x, y, kPlanerPressMs);
+            }
         } else if (gTouch.fingers == 2) {
             gTouch.second = event.tfinger.fingerId;
             gTouch.secondX = x;
             gTouch.secondY = y;
+            if (gTouch.mode != 0) {
+                // a second finger means zooming: take back the press of the first one
+                if (gTouch.mode == 1) {
+                    if (!gTouch.queue.empty()) {
+                        gTouch.queue.clear();
+                    } else {
+                        TouchSendButton(TouchAction::LeftUp, gTouch.lastX, gTouch.lastY);
+                    }
+                }
+                gTouch.mode = 0;
+                gTouch.peek = true;
+            }
             if (!gTouch.dragging && !gTouch.consumed) {
                 gTouch.multi = true;
                 const float dx = static_cast<float>(gTouch.lastX - x);
@@ -860,6 +915,13 @@ bool TouchHandleEvent(const SDL_Event &eventIn) {
         gTouch.lastY = y;
         const SLONG slop = kDragDistance * h / 480;
         const bool moved = (abs(x - gTouch.startX) > slop || abs(y - gTouch.startY) > slop);
+        if (gTouch.mode != 0) {
+            if (moved) {
+                gTouch.dragging = true; // here: "the finger has travelled"
+            }
+            TouchSendMotion(x, y);
+            return true;
+        }
         if (!gTouch.dragging && !gTouch.peek && moved && SDL_GetTicks() - gTouch.downTime > kSwipeStartMs) {
             gTouch.peek = true; // moved off slowly: looking around, not dragging
         }
@@ -881,7 +943,20 @@ bool TouchHandleEvent(const SDL_Event &eventIn) {
         gTouch.pinching = false;
         if (gTouch.active && event.tfinger.fingerId == gTouch.primary) {
             gTouch.active = false;
-            if (gTouch.dragging) {
+            if (gTouch.mode == 1) {
+                // planner: release; an order that was picked up and carried along is put down here
+                TouchSendMotion(x, y);
+                TouchEnqueue(TouchAction::LeftUp, x, y, kClickHoldMs);
+                if (gTouch.dragging) {
+                    TouchEnqueue(TouchAction::DropDown, x, y, kHoverMs);
+                    TouchEnqueue(TouchAction::DropUp, x, y, kClickHoldMs);
+                }
+            } else if (gTouch.mode == 2) {
+                // planner: the order on the cursor is put down where the finger is lifted
+                TouchSendMotion(x, y);
+                TouchEnqueue(TouchAction::LeftDown, x, y, kHoverMs);
+                TouchEnqueue(TouchAction::LeftUp, x, y, kClickHoldMs);
+            } else if (gTouch.dragging) {
                 TouchSendMotion(x, y);
                 TouchSendButton(TouchAction::LeftUp, x, y);
             } else if (gTouch.consumed || gTouch.peek) {
@@ -910,6 +985,7 @@ bool TouchHandleEvent(const SDL_Event &eventIn) {
         gTouch.active = false;
         gTouch.dragging = false;
         gTouch.pinching = false;
+        gTouch.mode = 0;
         gTouch.barFingers.clear();
         gTouch.pressedButton = -1;
         return false;
