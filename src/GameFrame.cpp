@@ -27,10 +27,26 @@
 #include <SDL_hints.h>
 
 #ifdef __ANDROID__
+#include <SDL_mixer.h>
+
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <deque>
+#include <jni.h>
 #include <vector>
+
+// Set by the Java side (ATActivity) while another app has the audio focus, e.g. during a
+// phone call that does not put the game into the background. Applied in TouchTick().
+static std::atomic<bool> gAudioFocusLost{false};
+
+extern "C" {
+JNIEXPORT void JNICALL Java_io_github_daredevil3x7_airlinetycoon_ATActivity_nativeSetAudioFocusLost(JNIEnv *env, jclass cls, jboolean lost);
+
+JNIEXPORT void JNICALL Java_io_github_daredevil3x7_airlinetycoon_ATActivity_nativeSetAudioFocusLost(JNIEnv * /*env*/, jclass /*cls*/, jboolean lost) {
+    gAudioFocusLost.store(lost != JNI_FALSE);
+}
+}
 #endif
 
 extern SBNetwork gNetwork;
@@ -247,9 +263,11 @@ struct TouchState {
     // fingers that went down outside of the picture (on a button or on the empty bar)
     std::vector<SDL_FingerID> barFingers;
     SLONG pressedButton{-1};
+    Uint32 saveFlashUntil{0}; // quick save button lights up after a successful save
+    Uint32 loadArmedUntil{0}; // quick load needs a second press within this time
 } gTouch;
 
-enum TouchButtonAction { BtnMenu, BtnPause, BtnKeyboard, BtnZoom, BtnFaster, BtnSlower, BtnBack };
+enum TouchButtonAction { BtnMenu, BtnPause, BtnSave, BtnLoad, BtnKeyboard, BtnZoom, BtnFaster, BtnSlower, BtnBack };
 
 struct TouchButton {
     SDL_Rect rect;
@@ -333,8 +351,8 @@ std::vector<TouchButton> TouchLayoutButtons() {
     const ATView base = GetBaseView(w, h);
     const SLONG barLeft = base.x;
     const SLONG barRight = w - (base.x + base.w);
-    const std::vector<TouchButtonAction> left = {BtnMenu, BtnPause, BtnKeyboard, BtnZoom};
-    const std::vector<TouchButtonAction> right = {BtnFaster, BtnSlower, BtnBack};
+    const std::vector<TouchButtonAction> left = {BtnMenu, BtnSave, BtnLoad, BtnKeyboard};
+    const std::vector<TouchButtonAction> right = {BtnZoom, BtnFaster, BtnSlower, BtnBack};
 
     for (SLONG side = 0; side < 2; side++) {
         const SLONG barW = (side == 0) ? barLeft : barRight;
@@ -351,6 +369,15 @@ std::vector<TouchButton> TouchLayoutButtons() {
         }
     }
     return buttons;
+}
+
+void TouchFillTriangleV(SDL_Renderer *renderer, SLONG centerX, SLONG tipY, SLONG length, SLONG halfWidth, SLONG direction) {
+    // direction 1: tip points down, -1: up
+    for (SLONG i = 0; i <= length; i++) {
+        const SLONG y = tipY - direction * i;
+        const SLONG half = halfWidth * i / std::max(1, length);
+        SDL_RenderDrawLine(renderer, centerX - half, y, centerX + half, y);
+    }
 }
 
 void TouchFillTriangle(SDL_Renderer *renderer, SLONG tipX, SLONG centerY, SLONG length, SLONG halfHeight, SLONG direction) {
@@ -378,7 +405,15 @@ void TouchDrawOverlay(SDL_Renderer *renderer) {
         const SLONG cx = r.x + r.w / 2;
         const SLONG cy = r.y + r.h / 2;
 
-        SDL_SetRenderDrawColor(renderer, 255, 255, 255, (gTouch.pressedButton == i) ? 90 : 28);
+        const Uint32 now = SDL_GetTicks();
+        bool lit = (gTouch.pressedButton == i);
+        if (buttons[i].action == BtnSave && !SDL_TICKS_PASSED(now, gTouch.saveFlashUntil)) {
+            lit = true;
+        }
+        if (buttons[i].action == BtnLoad && !SDL_TICKS_PASSED(now, gTouch.loadArmedUntil)) {
+            lit = true; // waiting for the confirming second press
+        }
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, lit ? 100 : 28);
         SDL_RenderFillRect(renderer, &r);
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 110);
         SDL_RenderDrawRect(renderer, &r);
@@ -396,6 +431,20 @@ void TouchDrawOverlay(SDL_Renderer *renderer) {
             const SDL_Rect b{cx + u, cy - 4 * u, 2 * u, 8 * u};
             SDL_RenderFillRect(renderer, &a);
             SDL_RenderFillRect(renderer, &b);
+        } break;
+        case BtnSave: { // arrow down into a tray
+            const SDL_Rect shaft{cx - u, cy - 5 * u, 2 * u, 4 * u};
+            const SDL_Rect tray{cx - 5 * u, cy + 5 * u, 10 * u, std::max(1, u)};
+            SDL_RenderFillRect(renderer, &shaft);
+            TouchFillTriangleV(renderer, cx, cy + 3 * u, 4 * u, 4 * u, 1);
+            SDL_RenderFillRect(renderer, &tray);
+        } break;
+        case BtnLoad: { // arrow up out of a tray
+            const SDL_Rect shaft{cx - u, cy - u, 2 * u, 4 * u};
+            const SDL_Rect tray{cx - 5 * u, cy + 5 * u, 10 * u, std::max(1, u)};
+            TouchFillTriangleV(renderer, cx, cy - 5 * u, 4 * u, 4 * u, -1);
+            SDL_RenderFillRect(renderer, &shaft);
+            SDL_RenderFillRect(renderer, &tray);
         } break;
         case BtnKeyboard: { // keyboard outline with keys
             const SDL_Rect frame{cx - 5 * u, cy - 3 * u, 10 * u, 6 * u};
@@ -451,6 +500,21 @@ void TouchPressButton(TouchButtonAction action) {
     case BtnPause:
         TouchSendKey(SDLK_PAUSE);
         break;
+    case BtnSave:
+        if (AtQuickSave()) {
+            gTouch.saveFlashUntil = SDL_GetTicks() + 800;
+        }
+        break;
+    case BtnLoad: {
+        // loading throws away the running game, so it takes two presses
+        const Uint32 now = SDL_GetTicks();
+        if (gTouch.loadArmedUntil != 0 && !SDL_TICKS_PASSED(now, gTouch.loadArmedUntil)) {
+            gTouch.loadArmedUntil = 0;
+            AtQuickLoad();
+        } else {
+            gTouch.loadArmedUntil = now + 3000;
+        }
+    } break;
     case BtnKeyboard:
         if (SDL_IsTextInputActive() == SDL_TRUE) {
             SDL_StopTextInput();
@@ -607,6 +671,20 @@ bool TouchOnScrollArrow() { return ::MouseClickId == 6010 || ::MouseClickId == 6
 void TouchTick() {
     gTouch.pumps++;
     TouchRunQueue();
+
+    // Music and sounds stop while another app has the audio focus
+    static bool audioPaused = false;
+    if (gAudioFocusLost.load()) {
+        audioPaused = true;
+        Mix_Pause(-1);
+        if (Mix_PlayingMusic() != 0 && Mix_PausedMusic() == 0) {
+            Mix_PauseMusic();
+        }
+    } else if (audioPaused) {
+        audioPaused = false;
+        Mix_Resume(-1);
+        Mix_ResumeMusic();
+    }
 
     const Uint32 now = SDL_GetTicks();
     if (gTouch.active && !gTouch.dragging && !gTouch.consumed && !gTouch.multi && now - gTouch.downTime >= kLongPressMs) {
@@ -819,25 +897,52 @@ bool TouchHandleEvent(const SDL_Event &eventIn) {
 //--------------------------------------------------------------------------------------------
 bool gMainLoopPump = false;
 
-void AtSaveOnBackground() {
-    if (!gMainLoopPump || Sim.bNetwork != 0 || Sim.Options.OptionAutosave == 0) {
-        return;
+// The game can be saved or replaced by a loaded one right now: a single player game is running,
+// no dialog or menu is open, and we are not inside a room's own message loop
+static bool AtCanSaveOrLoadNow() {
+    if (!gMainLoopPump || Sim.bNetwork != 0) {
+        return false;
     }
     if ((Sim.Gamestate & 15) != GAMESTATE_PLAYING || TopWin != nullptr) {
-        return; // intro, menus, end of day
+        return false; // intro, menus, end of day
     }
     if (Sim.localPlayer < 0 || Sim.localPlayer >= Sim.Players.Players.AnzEntries()) {
-        return;
+        return false;
     }
     if (Sim.CallItADay != 0 || Sim.Time <= 9 * 60000 || Sim.Time >= 18 * 60000) {
-        return;
+        return false;
     }
     const CStdRaum *room = Sim.Players.Players[Sim.localPlayer].LocationWin;
-    if (room != nullptr && ((room->IsDialogOpen() != 0) || (room->MenuIsOpen() != 0))) {
+    return room == nullptr || ((room->IsDialogOpen() == 0) && (room->MenuIsOpen() == 0));
+}
+
+void AtSaveOnBackground() {
+    if (Sim.Options.OptionAutosave == 0 || !AtCanSaveOrLoadNow()) {
         return;
     }
-
     Sim.SaveGame(11, CString(StandardTexte.GetS(TOKEN_MISC, 5000)));
+}
+
+constexpr SLONG kQuickSaveSlot = 12;
+
+bool AtQuickSave() {
+    if (!AtCanSaveOrLoadNow()) {
+        return false;
+    }
+    Sim.SaveGame(kQuickSaveSlot, CString("Quicksave"));
+    Sim.Players.Players[Sim.localPlayer].Messages.AddMessage(BERATERTYP_GIRL, StandardTexte.GetS(TOKEN_ADVICE, 500), MESSAGE_URGENT);
+    return true;
+}
+
+bool AtQuickLoad() {
+    if (!AtCanSaveOrLoadNow()) {
+        return false;
+    }
+    CString filename = FullFilename((LPCTSTR)bprintf("game%li.dat", static_cast<long>(kQuickSaveSlot)), SavegamePath);
+    if (DoesFileExist(filename) == 0) {
+        return false;
+    }
+    return Sim.LoadGame(kQuickSaveSlot) != 0;
 }
 
 //--------------------------------------------------------------------------------------------

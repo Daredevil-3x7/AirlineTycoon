@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Original icon of the fan build: an aircraft climbing past the sun -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- kept inside the safe zone of round and squircle launcher masks -->
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="0.72"
+        android:scaleY="0.72">
+        <!-- sun -->
+        <path
+            android:fillColor="#F6B92B"
+            android:pathData="M32,34m-13,0a13,13 0 1,0 26,0a13,13 0 1,0 -26,0" />
+        <!-- aircraft seen from above, climbing to the upper right -->
+        <group
+            android:pivotX="54"
+            android:pivotY="54"
+            android:rotation="45">
+            <path
+                android:fillColor="#FFFFFF"
+                android:pathData="M48,44 L16,62 L16,68 L48,60 Z" />
+            <path
+                android:fillColor="#FFFFFF"
+                android:pathData="M60,44 L92,62 L92,68 L60,60 Z" />
+            <path
+                android:fillColor="#FFFFFF"
+                android:pathData="M49,78 L36,88 L36,92 L50,88 Z" />
+            <path
+                android:fillColor="#FFFFFF"
+                android:pathData="M59,78 L72,88 L72,92 L58,88 Z" />
+            <path
+                android:fillColor="#FFFFFF"
+                android:pathData="M54,16 C58,18 60,24 60,30 L60,78 C60,84 57,90 54,94 C51,90 48,84 48,78 L48,30 C48,24 50,18 54,16 Z" />
+            <path
+                android:fillColor="#E0452B"
+                android:pathData="M16,62 L22,58.6 L22,66.5 L16,68 Z" />
+            <path
+                android:fillColor="#E0452B"
+                android:pathData="M92,62 L86,58.6 L86,66.5 L92,68 Z" />
+            <path
+                android:fillColor="#0B3C49"
+                android:pathData="M51,26 L57,26 L57.6,30 L50.4,30 Z" />
+        </group>
+    </group>
+</vector>

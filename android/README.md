@@ -28,7 +28,9 @@ Savegames, settings (`AT.json`) and the log (`debug.txt`) are stored in the same
 | Pinch with two fingers | Zoom in and out; drag with two fingers to move the zoomed picture |
 
 On wide screens the picture is shown 20% wider than 4:3, and the bars beside it hold buttons:
-menu (Esc), pause, keyboard and zoom on the left; faster, slower and right click on the right.
+menu (Esc), quick save, quick load and keyboard on the left; zoom, faster, slower and right click
+on the right. Quick load needs a second press within three seconds. Both use their own
+savegame slot, which the options menu does not list.
 
 ## Settings
 
