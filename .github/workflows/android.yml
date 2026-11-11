@@ -18,7 +18,8 @@ env:
 
 jobs:
   apk:
-    runs-on: ubuntu-latest
+    # pinned: package downloads for the newest runner image were failing
+    runs-on: ubuntu-24.04
 
     steps:
     - uses: actions/checkout@v4
