@@ -28,6 +28,34 @@ inline bool checkStartSpecificLang(char *str, char langIdent) {
     return (str[0] == langIdent && str[1] == ':' && str[2] == ':');
 }
 
+#ifdef __ANDROID__
+// The texts were written for 32-bit Windows, where "%li" and "%i" are the same. The game passes
+// 32-bit numbers for them. With a 64-bit "long" printf would also read the 4 bytes behind such a
+// number, which are random for arguments passed on the stack (seen as huge numbers in dialogs).
+// So "%li", "%ld", "%lu", "%lx" become "%i", "%d", "%u", "%x". "%lli" stays as it is.
+static void NormalizeLongFormats(char *str) {
+    char *out = str;
+    for (const char *in = str; *in != 0;) {
+        if (*in != '%') {
+            *out++ = *in++;
+            continue;
+        }
+        *out++ = *in++;
+        if (*in == '%') {
+            *out++ = *in++;
+            continue;
+        }
+        while (*in != 0 && strchr("-+ #0123456789.*", *in) != nullptr) {
+            *out++ = *in++;
+        }
+        if (in[0] == 'l' && in[1] != 0 && strchr("diuxX", in[1]) != nullptr) {
+            ++in;
+        }
+    }
+    *out = 0;
+}
+#endif
+
 void TEXTRES::LanguageSpecifyString(char *Dst, bool fallback) {
     const char *langs = "DEFTPNISOBJKLMNQRTUV";
     char lang = fallback ? 'E' : langs[gLanguage];
@@ -198,6 +226,9 @@ char *TEXTRES::FindTranslation(ULONG group, ULONG id) {
     strncpy(ResultStr.data(), text, ResultStr.size());
     ResultStr[(int)ResultStr.size()] = '\0';
     LanguageSpecifyString(ResultStr.data());
+#ifdef __ANDROID__
+    NormalizeLongFormats(ResultStr.data());
+#endif
     return ResultStr.data();
 }
 

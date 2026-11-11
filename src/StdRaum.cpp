@@ -756,7 +756,8 @@ void CStdRaum::MakeSayWindow(BOOL TextAlign, const char *GroupId, ULONG SubIdVon
             // MP: 1 int pro Antwort
             SLONG tmp = va_arg(Vars, SLONG);
 
-            snprintf(TmpString, sizeof(TmpString), DialogTexte.GetS(CurrentTextGroupId, c), tmp);
+            // the texts use "%li"
+            snprintf(TmpString, sizeof(TmpString), DialogTexte.GetS(CurrentTextGroupId, c), static_cast<long>(tmp));
         } else {
             // Alle für alle:
             vsnprintf(TmpString, sizeof(TmpString), DialogTexte.GetS(CurrentTextGroupId, c), Vars);

@@ -879,7 +879,7 @@ BOOL CStdRaum::PreLButtonDown(CPoint point) {
             }
             case 3002: {
                 SLONG tmp = (qPlayer.MaxAktien - qPlayer.AnzAktien) / 100 * 100;
-                MakeSayWindow(1, TOKEN_BANK, 3010, 3015, 1, &FontDialog, &FontDialogLight, tmp / 10, tmp / 4, tmp / 2, tmp * 3 / 4, tmp);
+                MakeSayWindow(1, TOKEN_BANK, 3010, 3015, 3, &FontDialog, &FontDialogLight, tmp / 10, tmp / 4, tmp / 2, tmp * 3 / 4, tmp, 0);
             } break;
             case 3010: // 10%
             case 3011: // 25%
@@ -901,7 +901,7 @@ BOOL CStdRaum::PreLButtonDown(CPoint point) {
                 break;
             case 3022: {
                 SLONG tmp = SLONG(qPlayer.Kurse[0]);
-                MakeSayWindow(1, TOKEN_BANK, 3030, 3033, 1, &FontDialog, &FontDialogLight, tmp - 5, tmp - 3, tmp - 1);
+                MakeSayWindow(1, TOKEN_BANK, 3030, 3033, 3, &FontDialog, &FontDialogLight, tmp - 5, tmp - 3, tmp - 1, 0);
             } break;
             case 3030:
             case 3031:
