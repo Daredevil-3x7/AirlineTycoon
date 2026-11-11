@@ -35,14 +35,19 @@ jobs:
         PACKAGES="libjansson-dev libsdl2-dev libsdl2-gfx-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-net-dev libsdl2-ttf-dev"
         install() { sudo timeout 300 apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 install -y $PACKAGES; }
         sudo timeout 120 apt-get update || true
-        if ! install; then
-          # the runner's default mirror sometimes stops answering
-          echo "Default mirror failed, switching to archive.ubuntu.com"
-          printf 'http://archive.ubuntu.com/ubuntu/\tpriority:1\n' | sudo tee /etc/apt/apt-mirrors.txt
-          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/*.sources /etc/apt/sources.list 2>/dev/null || true
-          sudo timeout 180 apt-get update
-          install
-        fi
+        # the runner's default mirror sometimes stops answering: try others
+        for MIRROR in default https://mirrors.edge.kernel.org/ubuntu https://mirror.math.princeton.edu/pub/ubuntu http://archive.ubuntu.com/ubuntu; do
+          if [ "$MIRROR" != default ]; then
+            echo "Switching to $MIRROR"
+            printf '%s/\tpriority:1\n' "$MIRROR" | sudo tee /etc/apt/apt-mirrors.txt
+            sudo sed -i -E "s#https?://[a-z.]*(archive\.ubuntu\.com/ubuntu|kernel\.org/ubuntu|princeton\.edu/pub/ubuntu)/?#$MIRROR/#g" /etc/apt/sources.list.d/*.sources /etc/apt/sources.list 2>/dev/null || true
+            sudo timeout 120 apt-get update || continue
+          fi
+          if install; then
+            exit 0
+          fi
+        done
+        exit 1
 
     - name: Host build (patched text resources)
       run: |
