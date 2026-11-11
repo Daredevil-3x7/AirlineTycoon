@@ -56,6 +56,37 @@ SLONG AtEventAdjustPremium(SLONG Praemie, ULONG VonCity, ULONG NachCity);
 CString AtEventHeadline(const ATGameEvent &event, bool announcement);
 CString AtKerosinHeadline(void);
 
+const char *AtText(const char *german, const char *english);
+
+// GameFinance.cpp: optional bank extensions (fixed deposit, term loan, short sales)
+class PLAYER;
+struct ATFinance {
+    __int64 deposit{0}; // fixed deposit, paid back with interest on depositDue
+    SLONG depositDue{0};
+    __int64 loan{0}; // term loan, repaid with interest on loanDue
+    SLONG loanDue{0};
+    SLONG shortShares[4]{}; // short sales per airline
+    double shortPrice[4]{};
+    SLONG shortDue[4]{};
+};
+extern ATFinance gFinance[4];
+constexpr SLONG kAtDepositDays = 7;
+constexpr SLONG kAtDepositPercent = 2;
+constexpr SLONG kAtLoanDays = 20;
+constexpr SLONG kAtLoanPercent = 3;
+constexpr SLONG kAtShortDays = 5;
+void AtFinanceReset(void);
+void AtFinanceSave(SLONG slot);
+void AtFinanceLoad(SLONG slot);
+void AtFinanceNewDay(void);
+bool AtFinanceOpenDeposit(PLAYER &qPlayer, __int64 amount);
+bool AtFinanceOpenLoan(PLAYER &qPlayer, __int64 amount);
+bool AtFinanceOpenShort(PLAYER &qPlayer, SLONG target, SLONG shares);
+__int64 AtFinanceCloseShort(PLAYER &qPlayer, SLONG target);
+CString AtFinanceSummary(SLONG player);
+CString AtStockHeadline(void);
+CString AtTakeoverHeadline(void);
+
 extern bool gMainLoopPump; // MessagePump() is being called by the main loop, not from inside a room or a loading screen
 void AtSaveOnBackground(void);
 bool AtQuickSave(void); // slot 12, which the options menu does not show

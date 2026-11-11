@@ -106,6 +106,7 @@ set(AT_SOURCES
     Mainfrm.cpp
     Makler.cpp
     GameEvents.cpp
+    GameFinance.cpp
     Misc.cpp
     Museum.cpp
     Nasa.cpp

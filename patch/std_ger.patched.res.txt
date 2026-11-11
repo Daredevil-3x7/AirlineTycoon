@@ -345,6 +345,24 @@
   O::Painéis solares
   S::Paneles solares
   D::Solarmodule
+>>0003601
+  D::Festgeld angelegt
+  E::Fixed deposit opened
+>>0003602
+  D::Festgeld mit Zinsen ausgezahlt
+  E::Fixed deposit paid out with interest
+>>0003603
+  D::Laufzeitkredit ausgezahlt
+  E::Term loan paid out
+>>0003604
+  D::Laufzeitkredit mit Zinsen getilgt
+  E::Term loan repaid with interest
+>>0003605
+  D::Gewinn aus Leerverkauf
+  E::Profit from short sale
+>>0003606
+  D::Verlust aus Leerverkauf
+  E::Loss from short sale
 
 //
 // Akti

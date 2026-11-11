@@ -2178,6 +2178,9 @@ void PLAYER::RentGate(SLONG Nummer, SLONG Miete) {
 //--------------------------------------------------------------------------------------------
 SLONG PLAYER::CalcCreditLimit() const {
     __int64 cr = (Money - Credit) / 2 - Credit;
+    if (PlayerNum >= 0 && PlayerNum < 4) {
+        cr -= gFinance[PlayerNum].loan; // a term loan of the optional bank extensions uses up the limit as well
+    }
 
     if (Credit < 200000) {
         cr = max(cr, 200000 - Credit);

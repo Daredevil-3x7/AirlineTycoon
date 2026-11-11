@@ -12,8 +12,6 @@
 namespace {
 constexpr SLONG kDaysPerBlock = 6; // at most one event in every block of days
 
-const char *Text(const char *german, const char *english) { return (gLanguage == LANGUAGE_D) ? german : english; }
-
 ATGameEvent EventOfBlock(SLONG block) {
     ATGameEvent event;
     if (block < 0 || Cities.AnzEntries() <= 0) {
@@ -57,6 +55,8 @@ ATGameEvent EventOfBlock(SLONG block) {
 }
 } // namespace
 
+const char *AtText(const char *german, const char *english) { return (gLanguage == LANGUAGE_D) ? german : english; }
+
 bool AtExtrasActive() { return gGameplayExtras && Sim.bNetwork == 0 && Sim.Difficulty == DIFF_FREEGAME; }
 
 bool AtEventOnDay(SLONG day, ATGameEvent &event) {
@@ -89,6 +89,31 @@ void AtEventsNewDay() {
         Sim.Kerosin -= Sim.Kerosin / 4;
     }
     Limit(SLONG(300), Sim.Kerosin, SLONG(700));
+
+    // the stock market reacts to the news
+    double factor = 1.0;
+    switch (event.type) {
+    case ATEVENT_KEROSIN_UP:
+        factor = 0.95;
+        break;
+    case ATEVENT_KEROSIN_DOWN:
+        factor = 1.03;
+        break;
+    case ATEVENT_STORM:
+        factor = 0.98;
+        break;
+    case ATEVENT_HOLIDAY:
+    case ATEVENT_FAIR:
+        factor = 1.02;
+        break;
+    default:
+        break;
+    }
+    for (SLONG c = 0; c < Sim.Players.Players.AnzEntries(); c++) {
+        if (Sim.Players.Players[c].IsOut == 0) {
+            Sim.Players.Players[c].Kurse[0] *= factor;
+        }
+    }
 
     if (Sim.localPlayer >= 0 && Sim.localPlayer < Sim.Players.Players.AnzEntries()) {
         Sim.Players.Players[Sim.localPlayer].Messages.AddMessage(BERATERTYP_GIRL, AtEventHeadline(event, false), MESSAGE_URGENT);
@@ -139,17 +164,17 @@ CString AtEventHeadline(const ATGameEvent &event, bool announcement) {
 
     switch (event.type) {
     case ATEVENT_HOLIDAY:
-        return CString(announcement ? Text("Ferien beginnen morgen: Reiseb\374ros rechnen mit Ansturm und h\366heren Pr\344mien", "Holidays start tomorrow: travel agencies expect a rush and higher premiums") : Text("Ferienzeit: Reiseauftr\344ge bringen jetzt ein Viertel mehr", "Holiday season: flight orders now pay a quarter more"));
+        return CString(announcement ? AtText("Ferien beginnen morgen: Reiseb\374ros rechnen mit Ansturm und h\366heren Pr\344mien", "Holidays start tomorrow: travel agencies expect a rush and higher premiums") : AtText("Ferienzeit: Reiseauftr\344ge bringen jetzt ein Viertel mehr", "Holiday season: flight orders now pay a quarter more"));
     case ATEVENT_FAIR:
-        return CString(bprintf(announcement ? Text("Morgen beginnt die Messe in %s - Fl\374ge dorthin sind gefragt", "The trade fair in %s opens tomorrow - flights there are in demand")
-                                            : Text("Messe in %s: Auftr\344ge von und nach dort bringen die H\344lfte mehr", "Trade fair in %s: orders from and to the city pay half as much again"),
+        return CString(bprintf(announcement ? AtText("Morgen beginnt die Messe in %s - Fl\374ge dorthin sind gefragt", "The trade fair in %s opens tomorrow - flights there are in demand")
+                                            : AtText("Messe in %s: Auftr\344ge von und nach dort bringen die H\344lfte mehr", "Trade fair in %s: orders from and to the city pay half as much again"),
                                (LPCTSTR)city));
     case ATEVENT_KEROSIN_UP:
-        return CString(announcement ? Text("Experten warnen: Kerosin wird morgen deutlich teurer", "Experts warn: kerosene will be much more expensive tomorrow") : Text("\326lkrise: Der Kerosinpreis ist sprunghaft gestiegen", "Oil crisis: the price of kerosene has jumped"));
+        return CString(announcement ? AtText("Experten warnen: Kerosin wird morgen deutlich teurer", "Experts warn: kerosene will be much more expensive tomorrow") : AtText("\326lkrise: Der Kerosinpreis ist sprunghaft gestiegen", "Oil crisis: the price of kerosene has jumped"));
     case ATEVENT_KEROSIN_DOWN:
-        return CString(announcement ? Text("\334berangebot erwartet: Kerosin wird morgen billiger", "Oversupply expected: kerosene will be cheaper tomorrow") : Text("Kerosin ist heute deutlich billiger - Tanks f\374llen lohnt sich", "Kerosene is much cheaper today - a good day to fill the tanks"));
+        return CString(announcement ? AtText("\334berangebot erwartet: Kerosin wird morgen billiger", "Oversupply expected: kerosene will be cheaper tomorrow") : AtText("Kerosin ist heute deutlich billiger - Tanks f\374llen lohnt sich", "Kerosene is much cheaper today - a good day to fill the tanks"));
     case ATEVENT_STORM:
-        return CString(announcement ? Text("Sturmwarnung f\374r morgen: Schlecht ausger\374stete Maschinen sind gef\344hrdet", "Storm warning for tomorrow: poorly equipped planes are at risk") : Text("Sturmtief \374ber dem Flughafen: Das Pannenrisiko ist stark erh\366ht", "Storm over the airport: the risk of breakdowns is much higher"));
+        return CString(announcement ? AtText("Sturmwarnung f\374r morgen: Schlecht ausger\374stete Maschinen sind gef\344hrdet", "Storm warning for tomorrow: poorly equipped planes are at risk") : AtText("Sturmtief \374ber dem Flughafen: Das Pannenrisiko ist stark erh\366ht", "Storm over the airport: the risk of breakdowns is much higher"));
     default:
         return CString();
     }
@@ -158,11 +183,11 @@ CString AtEventHeadline(const ATGameEvent &event, bool announcement) {
 CString AtKerosinHeadline() {
     const SLONG today = Sim.Kerosin;
     const SLONG before = Sim.KerosinPast[8];
-    const char *format = Text("Kerosin heute bei %li - Preis stabil", "Kerosene at %li today - price steady");
+    const char *format = AtText("Kerosin heute bei %li - Preis stabil", "Kerosene at %li today - price steady");
     if (today > before + 15) {
-        format = Text("Kerosin heute bei %li - Tendenz steigend", "Kerosene at %li today - rising");
+        format = AtText("Kerosin heute bei %li - Tendenz steigend", "Kerosene at %li today - rising");
     } else if (today < before - 15) {
-        format = Text("Kerosin heute bei %li - Tendenz fallend", "Kerosene at %li today - falling");
+        format = AtText("Kerosin heute bei %li - Tendenz fallend", "Kerosene at %li today - falling");
     }
     return CString(bprintf(format, static_cast<long>(today)));
 }

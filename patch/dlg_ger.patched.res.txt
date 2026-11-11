@@ -58,3 +58,42 @@
   O::[[BO\8600]]Você possui o seguinte número de aviões seguros:
   S::[[BO\8600]]Usted posee la siguiente cantidad de aviones seguros:
   D::[[BO\8600]]Also, Sie haben soviele sichere Flugzeuge wie folgt:
+
+
+//
+// Bank: optional extensions (GameFinance.cpp). 5060-5069 are lines that the game fills in.
+//
+>Bank
+>>0001006
+  D::Ich möchte auf fallende Kurse setzen.
+  E::I would like to bet on falling prices.
+>>0005060
+  D::%s
+  E::%s
+>>0005061
+  D::%s
+  E::%s
+>>0005062
+  D::%s
+  E::%s
+>>0005063
+  D::%s
+  E::%s
+>>0005064
+  D::%s
+  E::%s
+>>0005065
+  D::%s
+  E::%s
+>>0005066
+  D::%s
+  E::%s
+>>0005067
+  D::%s
+  E::%s
+>>0005068
+  D::%s
+  E::%s
+>>0005069
+  D::%s
+  E::%s

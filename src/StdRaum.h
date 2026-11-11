@@ -192,6 +192,11 @@ class CStdRaum {
                        ...);
     void CloseTextWindow(void);
     void StopDialog(void);
+
+    // optional bank extensions (end of Dialog.cpp)
+    void AtBankShowList(SLONG kind);
+    void AtBankSay(const CString &text);
+    bool AtBankHandle(SLONG id);
     void MakeNumberWindow(CString Text);
     void MakeNumberWindow(const char *GroupId, ULONG SubId, ...);
 

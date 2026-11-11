@@ -13,6 +13,7 @@
 #include "Proto.h"
 
 #include <cstdio>
+#include <vector>
 #include <cstdlib>
 #include <iostream>
 
@@ -587,6 +588,9 @@ BOOL CStdRaum::PreLButtonDown(CPoint point) {
             break;
 
         case TALKER_BANKER2:
+            if (AtExtrasActive() && AtBankHandle(id)) {
+                break;
+            }
             switch (id) {
             case 100: // Wie ist mein Kontostand?
                 if (qPlayer.Credit > 0) {
@@ -627,7 +631,11 @@ BOOL CStdRaum::PreLButtonDown(CPoint point) {
             } break;
 
             case 109:
-                MakeSayWindow(1, TOKEN_BANK, 101, 103, FALSE, &FontDialog, &FontDialogLight);
+                if (AtExtrasActive()) {
+                    AtBankShowList(1);
+                } else {
+                    MakeSayWindow(1, TOKEN_BANK, 101, 103, FALSE, &FontDialog, &FontDialogLight);
+                }
                 break;
 
             default:
@@ -637,6 +645,9 @@ BOOL CStdRaum::PreLButtonDown(CPoint point) {
             break;
 
         case TALKER_BANKER1:
+            if (AtExtrasActive() && AtBankHandle(id)) {
+                break;
+            }
             switch (id) {
             case 900:
             case 901:
@@ -645,7 +656,7 @@ BOOL CStdRaum::PreLButtonDown(CPoint point) {
             case 3015:
             case 3033:
             case 3051:
-                MakeSayWindow(1, TOKEN_BANK, 1000, 1005, FALSE, &FontDialog, &FontDialogLight);
+                MakeSayWindow(1, TOKEN_BANK, 1000, AtExtrasActive() ? 1006 : 1005, FALSE, &FontDialog, &FontDialogLight);
                 break;
 
             case 920:
@@ -805,7 +816,7 @@ BOOL CStdRaum::PreLButtonDown(CPoint point) {
             case 2114:
             case 2124:
             case 2514:
-                MakeSayWindow(1, TOKEN_BANK, 1000, 1005, FALSE, &FontDialog, &FontDialogLight);
+                MakeSayWindow(1, TOKEN_BANK, 1000, AtExtrasActive() ? 1006 : 1005, FALSE, &FontDialog, &FontDialogLight);
                 break;
 
             case 1002: // Aktien anwenden:
@@ -857,11 +868,11 @@ BOOL CStdRaum::PreLButtonDown(CPoint point) {
                 if (GameMechanic::overtakeAirline(qPlayer, DialogPar1, (id == 2531))) {
                     MakeSayWindow(0, TOKEN_BANK, 2540, pFontPartner);
                 } else {
-                    MakeSayWindow(1, TOKEN_BANK, 1000, 1005, FALSE, &FontDialog, &FontDialogLight);
+                    MakeSayWindow(1, TOKEN_BANK, 1000, AtExtrasActive() ? 1006 : 1005, FALSE, &FontDialog, &FontDialogLight);
                 }
                 break;
             case 2532:
-                MakeSayWindow(1, TOKEN_BANK, 1000, 1005, FALSE, &FontDialog, &FontDialogLight);
+                MakeSayWindow(1, TOKEN_BANK, 1000, AtExtrasActive() ? 1006 : 1005, FALSE, &FontDialog, &FontDialogLight);
                 break;
 
             case 1003: { // Aktien ausgeben:
@@ -5464,4 +5475,240 @@ BOOL CStdRaum::PreLButtonDown(CPoint point) {
     }
 
     return (FALSE);
+}
+
+//--------------------------------------------------------------------------------------------
+// Optional bank extensions (gGameplayExtras): fixed deposit and term loan at the credit desk,
+// short sales at the stock desk. The lists use the text ids 5060-5069 ("%s", filled in here),
+// what the banker says uses the id 5050.
+//--------------------------------------------------------------------------------------------
+namespace {
+constexpr SLONG kBankSayId = 5050;
+constexpr SLONG kBankListId = 5060;
+
+enum { kListCreditDesk = 1, kListDeposit, kListLoan, kListShortTarget, kListShortAmount };
+
+SLONG sBankList = 0;       // list that is on the screen
+SLONG sBankDesk = 2;       // 1: stock desk, 2: credit desk
+SLONG sShortTarget = -1;   // airline chosen for a short sale
+__int64 sAmounts[3] = {0, 0, 0};
+const SLONG kShortSizes[3] = {1000, 5000, 20000};
+} // namespace
+
+void CStdRaum::AtBankSay(const CString &text) { MakeSayWindow(0, kBankSayId, text, pFontPartner); }
+
+void CStdRaum::AtBankShowList(SLONG kind) {
+    PLAYER &qPlayer = Sim.Players.Players[PlayerNum];
+    std::vector<CString> items;
+    const CString never = AtText("Lieber doch nicht.", "I would rather not.");
+
+    switch (kind) {
+    case kListCreditDesk:
+        sBankDesk = 2;
+        items.emplace_back(AtText("Ich m\366chte einen Kredit aufnehmen.", "I would like to take out a loan."));
+        items.emplace_back(AtText("Ich m\366chte einen Kredit zur\374ckzahlen.", "I would like to pay back a loan."));
+        items.emplace_back(bprintf(AtText("Ich m\366chte Festgeld anlegen (%li Tage, %li Prozent Zinsen).", "I would like a fixed deposit (%li days, %li percent interest)."),
+                                   static_cast<long>(kAtDepositDays), static_cast<long>(kAtDepositPercent)));
+        items.emplace_back(bprintf(AtText("Ich brauche einen Laufzeitkredit (%li Tage, %li Prozent Zinsen).", "I need a term loan (%li days, %li percent interest)."),
+                                   static_cast<long>(kAtLoanDays), static_cast<long>(kAtLoanPercent)));
+        items.emplace_back(AtText("Wie stehen meine Anlagen?", "How are my investments doing?"));
+        items.emplace_back(AtText("Auf Wiedersehen.", "Goodbye."));
+        break;
+
+    case kListDeposit:
+    case kListLoan: {
+        const __int64 base = (kind == kListDeposit) ? qPlayer.Money : static_cast<__int64>(qPlayer.CalcCreditLimit());
+        for (SLONG c = 0; c < 3; c++) {
+            sAmounts[c] = base * (c + 1) / ((kind == kListDeposit) ? 4 : 3) / 1000 * 1000;
+            items.emplace_back(bprintf(kind == kListDeposit ? AtText("%s anlegen.", "Deposit %s.") : AtText("%s leihen.", "Borrow %s."),
+                                       (LPCTSTR)Insert1000erDots64(sAmounts[c])));
+        }
+        items.push_back(never);
+    } break;
+
+    case kListShortTarget:
+        sBankDesk = 1;
+        for (SLONG c = 0; c < 4; c++) {
+            const PLAYER &qTarget = Sim.Players.Players[c];
+            if (c == PlayerNum) {
+                items.emplace_back(bprintf(AtText("%s (die eigene Airline, nicht m\366glich)", "%s (your own airline, not possible)"), (LPCTSTR)qTarget.AirlineX));
+            } else {
+                items.emplace_back(bprintf(AtText("Gegen %s wetten (Kurs %li)", "Bet against %s (price %li)"), (LPCTSTR)qTarget.AirlineX,
+                                           static_cast<long>(qTarget.Kurse[0])));
+            }
+        }
+        items.emplace_back(AtText("Meine Leerverk\344ufe jetzt abrechnen.", "Settle my short sales now."));
+        items.push_back(never);
+        break;
+
+    case kListShortAmount:
+        for (SLONG c = 0; c < 3; c++) {
+            const double price = (sShortTarget >= 0 && sShortTarget < 4) ? Sim.Players.Players[sShortTarget].Kurse[0] : 0.0;
+            items.emplace_back(bprintf(AtText("%li Aktien (Sicherheit: %s)", "%li shares (security: %s)"), static_cast<long>(kShortSizes[c]),
+                                       (LPCTSTR)Insert1000erDots64(static_cast<__int64>(price * kShortSizes[c]))));
+        }
+        items.push_back(never);
+        break;
+
+    default:
+        return;
+    }
+
+    sBankList = kind;
+    const auto count = static_cast<SLONG>(items.size());
+    while (items.size() < 6) {
+        items.emplace_back("");
+    }
+    MakeSayWindow(1, TOKEN_BANK, kBankListId, kBankListId + count - 1, 1, &FontDialog, &FontDialogLight, (LPCTSTR)items[0], (LPCTSTR)items[1], (LPCTSTR)items[2],
+                  (LPCTSTR)items[3], (LPCTSTR)items[4], (LPCTSTR)items[5]);
+}
+
+// Returns true if the answer belonged to the bank extensions
+bool CStdRaum::AtBankHandle(SLONG id) {
+    PLAYER &qPlayer = Sim.Players.Players[PlayerNum];
+
+    if (id == 1006) { // "I would like to bet on falling prices"
+        if (DialogMedium == MEDIUM_HANDY) {
+            MakeSayWindow(0, TOKEN_BANK, 1200, pFontPartner);
+        } else {
+            AtBankShowList(kListShortTarget);
+        }
+        return true;
+    }
+
+    if (id == kBankSayId) { // the banker has spoken, back to the main list of the desk
+        if (sBankDesk == 1) {
+            MakeSayWindow(1, TOKEN_BANK, 1000, 1006, FALSE, &FontDialog, &FontDialogLight);
+        } else {
+            AtBankShowList(kListCreditDesk);
+        }
+        return true;
+    }
+
+    if (id < kBankListId || id > kBankListId + 9) {
+        return false;
+    }
+    const SLONG choice = id - kBankListId;
+
+    switch (sBankList) {
+    case kListCreditDesk:
+        switch (choice) {
+        case 0: { // regular credit, as in the original dialog
+            MenuDialogReEntryB = -1;
+            __int64 tmp = qPlayer.CalcCreditLimit() / 1000 * 1000;
+            if (tmp == 0) {
+                MakeSayWindow(0, TOKEN_BANK, 120, pFontPartner);
+            } else if (DialogMedium == MEDIUM_HANDY) {
+                MakeSayWindow(0, TOKEN_BANK, 150, pFontPartner);
+            } else {
+                MenuStart(MENU_BANK, tmp, 1);
+            }
+        } break;
+        case 1: {
+            MenuDialogReEntryB = -1;
+            SLONG tmp = SLONG(min(0x7fffffff, qPlayer.Credit / 2));
+            if (qPlayer.Credit == 0) {
+                MakeSayWindow(0, TOKEN_BANK, 140, pFontPartner);
+            } else if (DialogMedium == MEDIUM_HANDY) {
+                MakeSayWindow(0, TOKEN_BANK, 150, pFontPartner);
+            } else {
+                MenuStart(MENU_BANK, tmp, 2);
+            }
+        } break;
+        case 2:
+            if (gFinance[PlayerNum].deposit != 0) {
+                AtBankSay(AtText("Sie haben bereits Festgeld bei uns. Ein zweites gibt es erst, wenn das erste ausgezahlt ist.", "You already have a fixed deposit with us. You can open another one once it has been paid out."));
+            } else if (qPlayer.Money < 100000) {
+                AtBankSay(AtText("Festgeld lohnt sich erst ab 100.000 auf dem Konto.", "A fixed deposit only makes sense with 100.000 or more in your account."));
+            } else {
+                AtBankShowList(kListDeposit);
+            }
+            break;
+        case 3:
+            if (gFinance[PlayerNum].loan != 0) {
+                AtBankSay(AtText("Sie haben bereits einen Laufzeitkredit. Erst wenn er getilgt ist, gibt es den n\344chsten.", "You already have a term loan. You can get the next one once it is repaid."));
+            } else if (qPlayer.CalcCreditLimit() < 30000) {
+                AtBankSay(AtText("Im Moment kann ich Ihnen keinen weiteren Kredit geben.", "At the moment I cannot give you any more credit."));
+            } else {
+                AtBankShowList(kListLoan);
+            }
+            break;
+        case 4:
+            AtBankSay(AtFinanceSummary(PlayerNum));
+            break;
+        default:
+            StopDialog();
+            break;
+        }
+        return true;
+
+    case kListDeposit:
+        if (choice < 3 && AtFinanceOpenDeposit(qPlayer, sAmounts[choice])) {
+            AtBankSay(CString(bprintf(AtText("Abgemacht. In %li Tagen ist Ihr Geld mit %li Prozent Zinsen wieder auf dem Konto.", "Agreed. In %li days your money will be back in your account with %li percent interest."),
+                                      static_cast<long>(kAtDepositDays), static_cast<long>(kAtDepositPercent))));
+        } else if (choice < 3) {
+            AtBankSay(AtText("So viel Geld haben Sie gerade nicht auf dem Konto.", "You do not have that much money in your account right now."));
+        } else {
+            AtBankShowList(kListCreditDesk);
+        }
+        return true;
+
+    case kListLoan:
+        if (choice < 3 && AtFinanceOpenLoan(qPlayer, sAmounts[choice])) {
+            AtBankSay(CString(bprintf(AtText("Das Geld ist auf Ihrem Konto. In %li Tagen buche ich es mit %li Prozent Zinsen wieder ab.", "The money is in your account. In %li days I will debit it again with %li percent interest."),
+                                      static_cast<long>(kAtLoanDays), static_cast<long>(kAtLoanPercent))));
+        } else if (choice < 3) {
+            AtBankSay(AtText("So viel kann ich Ihnen leider nicht geben.", "I am afraid I cannot give you that much."));
+        } else {
+            AtBankShowList(kListCreditDesk);
+        }
+        return true;
+
+    case kListShortTarget:
+        if (choice < 4) {
+            const PLAYER &qTarget = Sim.Players.Players[choice];
+            if (choice == PlayerNum) {
+                AtBankSay(AtText("Gegen die eigene Airline k\366nnen Sie nicht wetten.", "You cannot bet against your own airline."));
+            } else if (qTarget.IsOut != 0 || qTarget.Kurse[0] < 1.0) {
+                AtBankSay(AtText("Diese Aktie wird nicht mehr gehandelt.", "This share is no longer traded."));
+            } else if (gFinance[PlayerNum].shortShares[choice] != 0) {
+                AtBankSay(AtText("Gegen diese Airline l\344uft schon ein Leerverkauf von Ihnen.", "You already have a short sale running against this airline."));
+            } else {
+                sShortTarget = choice;
+                AtBankShowList(kListShortAmount);
+            }
+        } else if (choice == 4) {
+            __int64 total = 0;
+            bool any = false;
+            for (SLONG c = 0; c < 4; c++) {
+                if (gFinance[PlayerNum].shortShares[c] != 0) {
+                    any = true;
+                    total += AtFinanceCloseShort(qPlayer, c);
+                }
+            }
+            if (!any) {
+                AtBankSay(AtText("Sie haben keine offenen Leerverk\344ufe.", "You have no open short sales."));
+            } else {
+                AtBankSay(CString(bprintf(total >= 0 ? AtText("Alles abgerechnet: %s Gewinn.", "All settled: %s profit.") : AtText("Alles abgerechnet: %s Verlust.", "All settled: %s loss."),
+                                          (LPCTSTR)Insert1000erDots64(total >= 0 ? total : -total))));
+            }
+        } else {
+            MakeSayWindow(1, TOKEN_BANK, 1000, 1006, FALSE, &FontDialog, &FontDialogLight);
+        }
+        return true;
+
+    case kListShortAmount:
+        if (choice < 3 && AtFinanceOpenShort(qPlayer, sShortTarget, kShortSizes[choice])) {
+            AtBankSay(CString(bprintf(AtText("Notiert. F\344llt der Kurs, verdienen Sie; steigt er, zahlen Sie. In %li Tagen rechne ich ab, auf Wunsch auch fr\374her.", "Noted. If the price falls you earn, if it rises you pay. I will settle in %li days, or earlier if you wish."),
+                                      static_cast<long>(kAtShortDays))));
+        } else if (choice < 3) {
+            AtBankSay(AtText("Daf\374r fehlt Ihnen die Sicherheit auf dem Konto.", "You do not have the security for that in your account."));
+        } else {
+            MakeSayWindow(1, TOKEN_BANK, 1000, 1006, FALSE, &FontDialog, &FontDialogLight);
+        }
+        return true;
+
+    default:
+        return false;
+    }
 }

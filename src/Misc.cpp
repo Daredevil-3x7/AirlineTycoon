@@ -1081,6 +1081,8 @@ void HEADLINES::AddGameNews() {
         add(Sim.Date % 2 == 0 ? 2 : 0, AtEventHeadline(event, false), true);
     }
     add(1, AtKerosinHeadline(), false);
+    add(0, AtTakeoverHeadline(), true);
+    add(2, AtStockHeadline(), false);
 }
 
 //--------------------------------------------------------------------------------------------

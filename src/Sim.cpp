@@ -603,6 +603,7 @@ void SIM::ChooseStartup() {
     gDisablePauseKey = FALSE;
 
     LeftEnd = CheckIn = Office = Entry = Shops = Cafe = Security = Suitcase = WaitZone = RightEnd = 1;
+    AtFinanceReset();
     if (AtExtrasActive()) {
         // Every airline starts with two gates. That needs the largest airport (see ValidateStartGates)
         CheckIn = WaitZone = Suitcase = 5;
@@ -2485,6 +2486,7 @@ void SIM::NewDay() {
 
     Limit(SLONG(300), Kerosin, SLONG(700));
     AtEventsNewDay(); // optional events: price shocks, message about the event of the day
+    AtFinanceNewDay(); // optional bank extensions: contracts that are due today
     KerosinPast[9] = Kerosin;
 
     for (c = 0; c < Players.AnzPlayers; c++) {
@@ -3100,6 +3102,9 @@ BOOL SIM::LoadGame(SLONG Number) {
     if (DoesFileExist(Filename) == 0) {
         return (FALSE);
     }
+    if (bNetwork == 0) {
+        AtFinanceLoad(Number);
+    }
 
     bgIsLoadingSavegame = true;
 
@@ -3383,6 +3388,9 @@ BOOL SIM::LoadGame(SLONG Number) {
 // Speichert einen Spielstand
 //--------------------------------------------------------------------------------------------
 void SIM::SaveGame(SLONG Number, const CString &Name) const {
+    if (bNetwork == 0) {
+        AtFinanceSave(Number); // contracts of the optional bank extensions
+    }
     const char *pNamebaseStr = nullptr;
 
     if (bNetwork != 0) {

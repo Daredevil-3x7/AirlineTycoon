@@ -1356,7 +1356,11 @@ void CStdRaum::StartDialog(SLONG DialogPartner, BOOL Medium, SLONG DialogPar1, S
         } else if (DialogPar1 == 102) {
             MakeSayWindow(0, TOKEN_BANK, 162, pFontPartner);
         } else if (Medium == MEDIUM_AIR) {
-            MakeSayWindow(1, TOKEN_BANK, 101, 103, FALSE, &FontDialog, &FontDialogLight);
+            if (AtExtrasActive()) {
+                AtBankShowList(1);
+            } else {
+                MakeSayWindow(1, TOKEN_BANK, 101, 103, FALSE, &FontDialog, &FontDialogLight);
+            }
         } else {
             MakeSayWindow(0, TOKEN_BANK, 109, pFontPartner);
         }

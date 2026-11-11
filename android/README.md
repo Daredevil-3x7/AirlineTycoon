@@ -61,6 +61,14 @@ command line; on by default only on Android). They do not apply to missions and 
   one; the worse the relationship, the nastier the jobs. They also strike back at the human
   player once they dislike them enough, at every difficulty level.
 
+- **Bank:** at the credit desk a fixed deposit (7 days, 2 percent) and a term loan (20 days,
+  3 percent, counts against the credit limit); at the stock desk short sales against the other
+  airlines (settled after 5 days or on request, the value of the shares has to be in the account).
+  These contracts are stored in `game<N>.fin` next to the savegame.
+- **Stock market:** share prices react to the events; the newspapers report the biggest mover
+  of the day and airlines that are being bought up (from one quarter of the shares on), and
+  the advisor warns when a competitor holds 30 percent of the player's airline.
+
 ## Limitations
 
 - Music: only the OGG tracks play. MIDI is not available on Android.
