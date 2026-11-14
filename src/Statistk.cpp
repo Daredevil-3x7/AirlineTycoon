@@ -924,6 +924,8 @@ void CStatistik::RepaintTextWindow() {
             CString output;
             __int64 summe = 0;
             __int64 differenz = 0;
+            bool hiddenInSum = false;  // a total over figures that are not shown would be wrong
+            bool hiddenInDiff = false;
 
             RECT rc;
             rc.left = p * 109;
@@ -940,11 +942,31 @@ void CStatistik::RepaintTextWindow() {
 
                     auto type = item.typOfItem;
                     auto berater = (p == PlayerNum) ? BERATERTYP_GELD : BERATERTYP_INFO;
-                    if (Sim.Players.Players[PlayerNum].HasBerater(berater) < item.beraterSkill) {
+                    // extra rules: an airline knows its own books without an advisor
+                    if (Sim.Players.Players[PlayerNum].HasBerater(berater) < item.beraterSkill && !(AtExtrasActive() && p == PlayerNum)) {
                         type = TYP_UNAVAILABLE;
                     }
                     if (p != PlayerNum && Sim.Players.Players[PlayerNum].HasBerater(berater) < item.beraterSkillInfo) {
                         type = TYP_UNAVAILABLE;
+                    }
+                    if (AtExtrasActive()) {
+                        if (type == TYP_UNAVAILABLE && item.visible && item.typOfItem != TYP_SUM_CURR && item.typOfItem != TYP_SUM_DIFF) {
+                            hiddenInSum = true;
+                            hiddenInDiff = true;
+                        }
+                        if (type == TYP_SUM_CURR && hiddenInSum) {
+                            type = TYP_UNAVAILABLE;
+                            differenz += summe;
+                            summe = 0;
+                        }
+                        if (type == TYP_SUM_DIFF && hiddenInDiff) {
+                            type = TYP_UNAVAILABLE;
+                            differenz = 0;
+                            hiddenInDiff = false;
+                        }
+                        if (item.typOfItem == TYP_SUM_CURR) {
+                            hiddenInSum = false;
+                        }
                     }
                     switch (type) {
                     case TYP_UNAVAILABLE:

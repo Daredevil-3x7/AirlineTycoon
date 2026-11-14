@@ -2488,6 +2488,7 @@ void SIM::NewDay() {
     AtEventsNewDay(); // optional events: price shocks, message about the event of the day
     AtFinanceNewDay(); // optional bank extensions: contracts that are due today
     AtQuestNewDay();   // optional side jobs that come in by phone
+    AtImageNewDay();   // optional: image follows passenger satisfaction
     KerosinPast[9] = Kerosin;
 
     for (c = 0; c < Players.AnzPlayers; c++) {

@@ -330,3 +330,43 @@ void AtQuestNewDay() {
                                     MESSAGE_NORMAL);
     }
 }
+
+//============================================================================================
+// Image in the free game: besides advertising, the image follows how satisfied the passengers
+// of the day before were. The secretary says what moved it.
+//============================================================================================
+void AtImageNewDay() {
+    if (!AtExtrasActive()) {
+        return;
+    }
+    // runs before the statistics get their entry for the new day: 0 = yesterday, 1 = the day before
+    for (SLONG c = 0; c < Sim.Players.Players.AnzEntries(); c++) {
+        PLAYER &qPlayer = Sim.Players.Players[c];
+        if (qPlayer.IsOut != 0) {
+            continue;
+        }
+        const __int64 happy = qPlayer.Statistiken[STAT_ZUFR_PASSAGIERE].GetAtPastDay(0) - qPlayer.Statistiken[STAT_ZUFR_PASSAGIERE].GetAtPastDay(1);
+        const __int64 unhappy = qPlayer.Statistiken[STAT_UNZUFR_PASSAGIERE].GetAtPastDay(0) - qPlayer.Statistiken[STAT_UNZUFR_PASSAGIERE].GetAtPastDay(1);
+        if (happy < 0 || unhappy < 0 || happy + unhappy < 50) {
+            continue; // too few passengers to talk about
+        }
+        const SLONG share = static_cast<SLONG>(happy * 100 / (happy + unhappy));
+        const SLONG delta = (share >= 85) ? 4 : (share >= 70) ? 2 : (share < 40) ? -4 : (share < 55) ? -2 : 0;
+        if (delta == 0) {
+            continue;
+        }
+        qPlayer.Image += delta;
+        Limit(SLONG(-1000), qPlayer.Image, SLONG(1000));
+        if (c == Sim.localPlayer) {
+            qPlayer.Messages.AddMessage(BERATERTYP_GIRL,
+                                        bprintf(AtText("Image %s%li: gestern waren %li Prozent der Passagiere zufrieden. Image jetzt %li von 1000.", "Image %s%li: %li percent of yesterday's passengers were satisfied. Image now %li of 1000."),
+                                                (delta > 0) ? "+" : "", static_cast<long>(delta), static_cast<long>(share), static_cast<long>(qPlayer.Image)),
+                                        MESSAGE_NORMAL);
+        }
+    }
+}
+
+// What the advertising agency tells about the image
+CString AtImageHelp() {
+    return AtText("Das Image reicht von -1000 bis 1000. Es steigt durch Werbekampagnen, durch zufriedene Passagiere (ab 70 Prozent am Tag), gutes Personal an Bord und erf\374llte Nebenauftr\344ge. Es sinkt durch unzufriedene Passagiere, zu hohe Ticketpreise, Pannen und Sabotage.", "The image ranges from -1000 to 1000. It rises with advertising campaigns, satisfied passengers (70 percent a day or more), good staff on board and finished side jobs. It falls with unhappy passengers, overpriced tickets, breakdowns and sabotage.");
+}

@@ -58,6 +58,8 @@ CString AtKerosinHeadline(void);
 bool AtOrderForSmallPlane(TEAKRAND *pRandom);
 bool AtOrderTooLarge(SLONG personen, SLONG distance, bool forSmallPlane);
 void AtQuestNewDay(void);
+void AtImageNewDay(void);
+CString AtImageHelp(void);
 
 const char *AtText(const char *german, const char *english);
 SLONG AtPlanerCarrying(void);

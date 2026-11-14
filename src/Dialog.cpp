@@ -4430,6 +4430,9 @@ BOOL CStdRaum::PreLButtonDown(CPoint point) {
 
             case 2000: // Spieler will Image wissen:
                 Limit(SLONG(-1000), qPlayer.Image, SLONG(1000));
+                if (AtExtrasActive()) {
+                    qPlayer.Messages.AddMessage(BERATERTYP_GIRL, AtImageHelp(), MESSAGE_URGENT);
+                }
 
                 if (qPlayer.Image == 0) {
                     MakeSayWindow(0, TOKEN_WERBUNG, 2520, pFontPartner, (LPCTSTR)qPlayer.AirlineX);

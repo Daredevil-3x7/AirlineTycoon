@@ -71,6 +71,10 @@ command line; on by default only on Android). They do not apply to missions and 
 - **Side jobs:** every five days somebody calls with a job for three days (carry passengers,
   complete flights or accept orders; the goal follows from the days before). A finished job
   pays a bonus and improves the image, a failed one costs nothing.
+- **Statistics:** the own column shows all figures without an advisor; a total over figures
+  that are hidden shows ??? instead of a wrong number.
+- **Image:** every day the image moves by up to 4 points with the share of satisfied passengers
+  of the day before; the secretary reports it, and explains the image when asked at the agency.
 - **Bank:** at the credit desk a fixed deposit (7 days, 2 percent) and a term loan (20 days,
   3 percent, counts against the credit limit); at the stock desk short sales against the other
   airlines (settled after 5 days or on request, the value of the shares has to be in the account).
