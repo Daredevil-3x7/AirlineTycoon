@@ -351,7 +351,17 @@ void AtImageNewDay() {
             continue; // too few passengers to talk about
         }
         const SLONG share = static_cast<SLONG>(happy * 100 / (happy + unhappy));
-        const SLONG delta = (share >= 85) ? 4 : (share >= 70) ? 2 : (share < 40) ? -4 : (share < 55) ? -2 : 0;
+        // Satisfaction lifts the image slowly and only up to a level that depends on the share:
+        // 80 percent carry it to 100, 90 percent to 300, 100 percent to 500. Beyond that it takes advertising.
+        const SLONG ceiling = (share - 75) * 20;
+        SLONG delta = 0;
+        if (share < 40) {
+            delta = -4;
+        } else if (share < 55) {
+            delta = -2;
+        } else if (qPlayer.Image < ceiling) {
+            delta = (share >= 95) ? 2 : 1;
+        }
         if (delta == 0) {
             continue;
         }
@@ -368,5 +378,5 @@ void AtImageNewDay() {
 
 // What the advertising agency tells about the image
 CString AtImageHelp() {
-    return AtText("Das Image reicht von -1000 bis 1000. Es steigt durch Werbekampagnen, durch zufriedene Passagiere (ab 70 Prozent am Tag), gutes Personal an Bord und erf\374llte Nebenauftr\344ge. Es sinkt durch unzufriedene Passagiere, zu hohe Ticketpreise, Pannen und Sabotage.", "The image ranges from -1000 to 1000. It rises with advertising campaigns, satisfied passengers (70 percent a day or more), good staff on board and finished side jobs. It falls with unhappy passengers, overpriced tickets, breakdowns and sabotage.");
+    return AtText("Das Image reicht von -1000 bis 1000. Es steigt durch Werbekampagnen, durch zufriedene Passagiere (langsam und je nach Quote nur bis h\366chstens 500), gutes Personal an Bord und erf\374llte Nebenauftr\344ge. Es sinkt durch unzufriedene Passagiere, zu hohe Ticketpreise, Pannen und Sabotage.", "The image ranges from -1000 to 1000. It rises with advertising campaigns, satisfied passengers (slowly, and depending on the share only up to 500 at most), good staff on board and finished side jobs. It falls with unhappy passengers, overpriced tickets, breakdowns and sabotage.");
 }
