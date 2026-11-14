@@ -34,6 +34,7 @@ class CStatButton {
 #define TYP_SUM_CURR_N 3 // Summe einer Gruppe (-)
 #define TYP_SUM_DIFF 4   // Differenz der Summen
 #define TYP_SHAREVALUE 5 // Wert aller Aktien zusammen
+#define TYP_CALC 6       // optional rules: figure calculated by AtStatCalc(), define = which one
 
 #define TYP_VALUE 20          // Normale Zahl
 #define TYP_CURRENCY 21       // Währung

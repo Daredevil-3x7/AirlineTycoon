@@ -76,6 +76,15 @@ command line; on by default only on Android). They do not apply to missions and 
 - **Image:** every day the image follows the share of satisfied passengers of the day before:
   it rises by 1 or 2 points up to a ceiling (80 percent: 100, 90 percent: 300, 100 percent: 500)
   and falls by 2 or 4 points below 55 percent; the secretary reports it, and explains the image when asked at the agency.
+- **Deals with rivals:** the conversation with a computer player (in the airport or by phone)
+  has a new line "I have a deal to propose": a pact against sabotage (7 days), a price
+  agreement (5 days, 10 percent more ticket income, 8 percent risk a day of a fine and an image
+  loss), a joint kerosene purchase (15 percent back), passing an unscheduled order on for a
+  commission or taking one over for a fee, and spreading rumours about another airline. Whether
+  the rival agrees depends on how much they like the player.
+- **More statistics:** the third page lists income per flight and per plane, passengers per
+  flight, share of satisfied passengers, market share, finished side jobs and the bank balance
+  of fixed deposit and term loan.
 - **Bank:** at the credit desk a fixed deposit (7 days, 2 percent) and a term loan (20 days,
   3 percent, counts against the credit limit); at the stock desk short sales against the other
   airlines (settled after 5 days or on request, the value of the shares has to be in the account).

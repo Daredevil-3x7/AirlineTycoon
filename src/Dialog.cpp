@@ -4670,6 +4670,10 @@ BOOL CStdRaum::PreLButtonDown(CPoint point) {
             PLAYER &qOther = Sim.Players.Players[DialogPar1];
             bool bIsRobot = (qOther.Owner == 1);
 
+            if (bIsRobot && AtExtrasActive() && AtRivalHandle(id)) {
+                break; // optional rules: deals with the computer players
+            }
+
             switch (id) {
             case 1000:
                 DialogPar2 ^= 1;
@@ -4717,9 +4721,9 @@ BOOL CStdRaum::PreLButtonDown(CPoint point) {
                     } else if ((!bIsRobot)) {
                         MakeSayWindow(1, TOKEN_PLAYER, 2020 + static_cast<SLONG>(id != 1600), 2023, FALSE, &FontDialog, &FontDialogLight);
                     } else if (DialogMedium == MEDIUM_AIR && ((qPlayer.HasItem(ITEM_PRALINEN) != 0) || (qPlayer.HasItem(ITEM_PRALINEN_A) != 0))) {
-                        MakeSayWindow(1, TOKEN_PLAYER, 2010 + static_cast<SLONG>(id != 1600), 2013, FALSE, &FontDialog, &FontDialogLight);
+                        MakeSayWindow(1, TOKEN_PLAYER, 2010 + static_cast<SLONG>(id != 1600), AtExtrasActive() ? 2014 : 2013, FALSE, &FontDialog, &FontDialogLight);
                     } else {
-                        MakeSayWindow(1, TOKEN_PLAYER, 2000 + static_cast<SLONG>(id != 1600), 2002, FALSE, &FontDialog, &FontDialogLight);
+                        MakeSayWindow(1, TOKEN_PLAYER, 2000 + static_cast<SLONG>(id != 1600), AtExtrasActive() ? 2003 : 2002, FALSE, &FontDialog, &FontDialogLight);
                     }
                 } else if (bIsRobot) {
                     // Was will der Computerspieler? Erst labern, dann Besprechen.
@@ -5708,6 +5712,164 @@ bool CStdRaum::AtBankHandle(SLONG id) {
             AtBankSay(AtText("Daf\374r fehlt Ihnen die Sicherheit auf dem Konto.", "You do not have the security for that in your account."));
         } else {
             MakeSayWindow(1, TOKEN_BANK, 1000, 1006, FALSE, &FontDialog, &FontDialogLight);
+        }
+        return true;
+
+    default:
+        return false;
+    }
+}
+
+//--------------------------------------------------------------------------------------------
+// Optional deals with the computer players (gGameplayExtras), reached through the extra line
+// 2003 / 2014 of the conversation with a rival. Lists and answers use the same text ids as
+// the bank extensions.
+//--------------------------------------------------------------------------------------------
+namespace {
+enum { kRivalMain = 1, kRivalOrders, kRivalSmear };
+SLONG sRivalList = 0;
+SLONG sRivalOrders[3] = {-1, -1, -1}; // album positions of the orders on offer
+SLONG sRivalTargets[2] = {-1, -1};
+} // namespace
+
+void CStdRaum::AtRivalShowList(SLONG kind) {
+    PLAYER &qPlayer = Sim.Players.Players[PlayerNum];
+    std::vector<CString> items;
+
+    switch (kind) {
+    case kRivalMain:
+        items.emplace_back(bprintf(AtText("Lassen wir uns %li Tage in Ruhe - keine Sabotage (%s).", "Let us leave each other alone for %li days - no sabotage (%s)."),
+                                   static_cast<long>(kAtPactDays), (LPCTSTR)Insert1000erDots64(kAtPactPrice)));
+        items.emplace_back(bprintf(AtText("Sprechen wir %li Tage die Ticketpreise ab.", "Let us agree on ticket prices for %li days."), static_cast<long>(kAtCartelDays)));
+        items.emplace_back(bprintf(AtText("Kaufen wir Kerosin gemeinsam ein (%li Prozent Rabatt).", "Let us buy kerosene together (%li percent discount)."),
+                                   static_cast<long>(kAtFuelRebatePercent)));
+        items.emplace_back(AtText("Ich m\366chte \374ber Auftr\344ge reden.", "I would like to talk about orders."));
+        items.emplace_back(AtText("Ich habe da etwas \374ber einen Konkurrenten geh\366rt ...", "I have heard something about a competitor ..."));
+        items.emplace_back(AtText("Schon gut, vergessen Sie es.", "Never mind, forget it."));
+        break;
+
+    case kRivalOrders: {
+        SLONG found = 0;
+        for (SLONG c = 0; c < 3; c++) {
+            sRivalOrders[c] = -1;
+        }
+        for (SLONG c = 0; c < qPlayer.Auftraege.AnzEntries() && found < 3; c++) {
+            if (qPlayer.Auftraege.IsInAlbum(c) != 0 && qPlayer.Auftraege[c].InPlan == 0 && qPlayer.Auftraege[c].Praemie > 0) {
+                const CAuftrag &order = qPlayer.Auftraege[c];
+                sRivalOrders[found++] = c;
+                items.emplace_back(bprintf(AtText("Fliegen Sie %s-%s f\374r mich (Provision %s).", "Fly %s-%s for me (commission %s)."),
+                                           (LPCTSTR)Cities[order.VonCity].Kuerzel, (LPCTSTR)Cities[order.NachCity].Kuerzel,
+                                           (LPCTSTR)Insert1000erDots64(AtRivalOrderCommission(order))));
+            }
+        }
+        const CAuftrag offer = AtRivalOfferedOrder(DialogPar1);
+        if (offer.Praemie > 0) {
+            items.emplace_back(bprintf(AtText("Ich nehme Ihnen %s-%s ab (%li Personen, Pr\344mie %s, Geb\374hr %s).", "I will take %s-%s off you (%li persons, premium %s, fee %s)."),
+                                       (LPCTSTR)Cities[offer.VonCity].Kuerzel, (LPCTSTR)Cities[offer.NachCity].Kuerzel, static_cast<long>(offer.Personen),
+                                       (LPCTSTR)Insert1000erDots64(offer.Praemie),
+                                       (LPCTSTR)Insert1000erDots64(static_cast<__int64>(offer.Praemie) * kAtOrderFeePercent / 100)));
+        } else {
+            items.emplace_back(AtText("(Heute hat er keinen Auftrag abzugeben.)", "(He has no order to pass on today.)"));
+        }
+        items.emplace_back(AtText("Lieber doch nicht.", "I would rather not."));
+    } break;
+
+    case kRivalSmear: {
+        SLONG found = 0;
+        sRivalTargets[0] = sRivalTargets[1] = -1;
+        for (SLONG c = 0; c < 4 && c < Sim.Players.Players.AnzEntries() && found < 2; c++) {
+            if (c != PlayerNum && c != DialogPar1 && Sim.Players.Players[c].IsOut == 0) {
+                sRivalTargets[found++] = c;
+                items.emplace_back(bprintf(AtText("Ger\374chte \374ber %s streuen (%s).", "Spread rumours about %s (%s)."), (LPCTSTR)Sim.Players.Players[c].AirlineX,
+                                           (LPCTSTR)Insert1000erDots64(kAtSmearPrice)));
+            }
+        }
+        items.emplace_back(AtText("Lieber doch nicht.", "I would rather not."));
+    } break;
+
+    default:
+        return;
+    }
+
+    sRivalList = kind;
+    DialogPar2 = 1; // the player is speaking
+    const auto count = static_cast<SLONG>(items.size());
+    while (items.size() < 6) {
+        items.emplace_back("");
+    }
+    MakeSayWindow(1, TOKEN_BANK, kBankListId, kBankListId + count - 1, 1, &FontDialog, &FontDialogLight, (LPCTSTR)items[0], (LPCTSTR)items[1], (LPCTSTR)items[2],
+                  (LPCTSTR)items[3], (LPCTSTR)items[4], (LPCTSTR)items[5]);
+}
+
+// Returns true if the answer belonged to the deals with a rival
+bool CStdRaum::AtRivalHandle(SLONG id) {
+    PLAYER &qPlayer = Sim.Players.Players[PlayerNum];
+    const SLONG rival = DialogPar1;
+    bool ok = false;
+    auto say = [this](const CString &text) {
+        DialogPar2 = 0; // the rival is speaking
+        MakeSayWindow(0, kBankSayId, text, pFontPartner);
+    };
+
+    if (id == 2003 || id == 2014) { // "I would like to propose a deal"
+        AtRivalShowList(kRivalMain);
+        return true;
+    }
+    if (id == kBankSayId) { // the rival has answered, back to the list of deals
+        AtRivalShowList(kRivalMain);
+        return true;
+    }
+    if (id < kBankListId || id > kBankListId + 9) {
+        return false;
+    }
+    const SLONG choice = id - kBankListId;
+
+    switch (sRivalList) {
+    case kRivalMain:
+        switch (choice) {
+        case 0:
+            say(AtRivalDealPact(qPlayer, rival, ok));
+            break;
+        case 1:
+            say(AtRivalDealCartel(qPlayer, rival, ok));
+            break;
+        case 2:
+            say(AtRivalDealFuel(qPlayer, rival, ok));
+            break;
+        case 3:
+            AtRivalShowList(kRivalOrders);
+            break;
+        case 4:
+            AtRivalShowList(kRivalSmear);
+            break;
+        default: // back to the usual conversation
+            sRivalList = 0;
+            DialogPar2 = 1;
+            MakeSayWindow(1, TOKEN_PLAYER, 2001, 2003, FALSE, &FontDialog, &FontDialogLight);
+            break;
+        }
+        return true;
+
+    case kRivalOrders: {
+        SLONG given = 0;
+        while (given < 3 && sRivalOrders[given] != -1) {
+            given++;
+        }
+        if (choice < given) {
+            say(AtRivalDealGiveOrder(qPlayer, rival, sRivalOrders[choice], ok));
+        } else if (choice == given) {
+            say(AtRivalDealTakeOrder(qPlayer, rival, ok));
+        } else {
+            AtRivalShowList(kRivalMain);
+        }
+        return true;
+    }
+
+    case kRivalSmear:
+        if (choice < 2 && sRivalTargets[choice] != -1) {
+            say(AtRivalDealSmear(qPlayer, rival, sRivalTargets[choice], ok));
+        } else {
+            AtRivalShowList(kRivalMain);
         }
         return true;
 

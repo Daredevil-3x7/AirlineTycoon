@@ -372,6 +372,17 @@ CStatistik::CStatistik(BOOL bHandy, ULONG PlayerNum) : CStdRaum(bHandy, PlayerNu
         _iArray[g][c].beraterSkillInfo = 80;
         _iArray[g][c].define = STAT_ZUFR_PERSONAL;
 
+        if (AtExtrasActive()) {
+            c++; // empty line, then the calculated figures
+            for (short code = 0; code < 7 && c + 1 < STAT_MAX_ITEMS; code++) {
+                c++;
+                _iArray[g][c].typOfItem = TYP_CALC;
+                _iArray[g][c].textId = 0;
+                _iArray[g][c].define = code;
+                _iArray[g][c].visible = false;
+            }
+        }
+
         assert(c < STAT_MAX_ITEMS);
     }
 
@@ -690,11 +701,12 @@ void CStatistik::OnPaint() {
     for (short i = 0; i < STAT_MAX_ITEMS; i++) {
         if (_iArray[_group][i].typOfItem != TYP_LINEFEED) {
             word group = _iArray[_group][i].typOfItem;
-            if (group >= 20) {
+            const bool calculated = (group == TYP_CALC);
+            if (group >= 20 || calculated) {
                 group = 0;
             }
 
-            CString text = StandardTexte.GetS("STAT", _iArray[_group][i].textId);
+            CString text = calculated ? AtStatCalcLabel(static_cast<SLONG>(_iArray[_group][i].define)) : CString(StandardTexte.GetS("STAT", _iArray[_group][i].textId));
             RoomBm.PrintAt(text, (group == 0U) ? FontSmallBlack : FontSmallPlastic, TEC_FONT_LEFT, rc.left + xOffset[group], rc.top, rc.right, rc.bottom);
 
             if (_iArray[_group][i].visible && group == 0) {
@@ -971,6 +983,10 @@ void CStatistik::RepaintTextWindow() {
                     switch (type) {
                     case TYP_UNAVAILABLE:
                         output = CString("???");
+                        break;
+
+                    case TYP_CALC:
+                        output = AtStatCalc(p, PlayerNum, static_cast<SLONG>(item.define));
                         break;
 
                     case TYP_VALUE:

@@ -197,6 +197,8 @@ class CStdRaum {
     void AtBankShowList(SLONG kind);
     void AtBankSay(const CString &text);
     bool AtBankHandle(SLONG id);
+    void AtRivalShowList(SLONG kind);
+    bool AtRivalHandle(SLONG id);
     void MakeNumberWindow(CString Text);
     void MakeNumberWindow(const char *GroupId, ULONG SubId, ...);
 

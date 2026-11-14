@@ -53,7 +53,7 @@ SLONG Bot::getMoodVictim() const {
     SLONG victim = -1;
     SLONG worst = -30;
     for (SLONG p = 0; p < 4; p++) {
-        if (p != qPlayer.PlayerNum && (Sim.Players.Players[p].IsOut == 0) && qPlayer.Sympathie[p] < worst) {
+        if (p != qPlayer.PlayerNum && (Sim.Players.Players[p].IsOut == 0) && qPlayer.Sympathie[p] < worst && !AtRivalPact(qPlayer.PlayerNum, p)) {
             worst = qPlayer.Sympathie[p];
             victim = p;
         }
@@ -63,7 +63,10 @@ SLONG Bot::getMoodVictim() const {
 
 SLONG Bot::getSabotageVictim() const {
     const SLONG victim = getMoodVictim();
-    return (victim != -1) ? victim : mNemesis;
+    if (victim != -1) {
+        return victim;
+    }
+    return AtRivalPact(qPlayer.PlayerNum, mNemesis) ? -1 : mNemesis;
 }
 
 /* Sabotage is part of some difficulty levels only. With the optional rules every level strikes

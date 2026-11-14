@@ -341,6 +341,11 @@ void PLAYER::ChangeMoney(__int64 Money, SLONG Reason, const CString &Par1, const
         break;
     case 2030:
         /* D::Ticketeinnahmen */
+        if (Money > 0 && AtRivalCartel(PlayerNum)) {
+            const __int64 extra = Money * kAtCartelPercent / 100; // optional rules: price agreement
+            this->Money += extra;
+            Money += extra;
+        }
         Statistiken[STAT_E_ROUTEN].AddAtPastDay(Money);
         Bilanz.Tickets += Money;
         break;
@@ -4844,6 +4849,9 @@ void PLAYER::RobotExecuteAction() {
             }
         }
 
+        if (dislike != -1 && AtRivalPact(PlayerNum, dislike)) {
+            dislike = -1; // optional rules: a pact is a pact
+        }
         TargetedPlayer = dislike;
 
         ArabTrust = max(1, ArabTrust); // Computerspieler müssen Araber nicht bestechen

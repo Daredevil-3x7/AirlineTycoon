@@ -10,6 +10,7 @@
 #include "TeakLibW.h"
 
 #include <SDL_messagebox.h>
+#include <cstdio>
 
 #include <filesystem>
 namespace fs = std::filesystem;
@@ -58,6 +59,43 @@ CString AtKerosinHeadline(void);
 bool AtOrderForSmallPlane(TEAKRAND *pRandom);
 bool AtOrderTooLarge(SLONG personen, SLONG distance, bool forSmallPlane);
 void AtQuestNewDay(void);
+
+// Deals with the computer players (GameRivals.cpp)
+struct ATRival {
+    SLONG pactUntil[4]{};   // no sabotage between the two airlines up to this day
+    SLONG cartelUntil[4]{}; // price agreement up to this day
+    SLONG lastSmear{-100};
+    SLONG lastFuel{-100};
+    SLONG lastOrderDeal{-100};
+    SLONG questsDone{0}; // finished side jobs
+};
+extern ATRival gRival[4];
+constexpr SLONG kAtPactDays = 7;
+constexpr __int64 kAtPactPrice = 150000;
+constexpr SLONG kAtCartelDays = 5;
+constexpr SLONG kAtCartelPercent = 10;
+constexpr SLONG kAtCartelRiskPercent = 8; // per day
+constexpr __int64 kAtCartelFine = 250000;
+constexpr SLONG kAtFuelRebatePercent = 15;
+constexpr SLONG kAtOrderCommissionPercent = 30;
+constexpr SLONG kAtOrderFeePercent = 15;
+constexpr __int64 kAtSmearPrice = 50000;
+void AtRivalReset(void);
+void AtRivalSave(FILE *file);
+void AtRivalLoad(FILE *file);
+void AtRivalNewDay(void);
+bool AtRivalPact(SLONG a, SLONG b);
+bool AtRivalCartel(SLONG player);
+CString AtRivalDealPact(PLAYER &qPlayer, SLONG rival, bool &ok);
+CString AtRivalDealCartel(PLAYER &qPlayer, SLONG rival, bool &ok);
+CString AtRivalDealFuel(PLAYER &qPlayer, SLONG rival, bool &ok);
+__int64 AtRivalOrderCommission(const CAuftrag &order);
+CString AtRivalDealGiveOrder(PLAYER &qPlayer, SLONG rival, SLONG index, bool &ok);
+CAuftrag AtRivalOfferedOrder(SLONG rival);
+CString AtRivalDealTakeOrder(PLAYER &qPlayer, SLONG rival, bool &ok);
+CString AtRivalDealSmear(PLAYER &qPlayer, SLONG rival, SLONG target, bool &ok);
+CString AtStatCalcLabel(SLONG code);
+CString AtStatCalc(SLONG player, SLONG viewer, SLONG code);
 void AtImageNewDay(void);
 CString AtImageHelp(void);
 

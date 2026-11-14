@@ -97,3 +97,14 @@
 >>0005069
   D::%s
   E::%s
+
+//
+// Play: optional deals with the computer players (GameRivals.cpp)
+//
+>Play
+>>0002003
+  D::Ich habe Ihnen ein Geschäft vorzuschlagen.
+  E::I have a deal to propose.
+>>0002014
+  D::Ich habe Ihnen ein Geschäft vorzuschlagen.
+  E::I have a deal to propose.

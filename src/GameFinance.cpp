@@ -32,6 +32,7 @@ void AtFinanceReset() {
     for (auto &f : gFinance) {
         f = ATFinance();
     }
+    AtRivalReset();
 }
 
 void AtFinanceSave(SLONG slot) {
@@ -47,6 +48,7 @@ void AtFinanceSave(SLONG slot) {
             fprintf(file, "%d %.4f %d\n", static_cast<int>(f.shortShares[c]), f.shortPrice[c], static_cast<int>(f.shortDue[c]));
         }
     }
+    AtRivalSave(file);
     fclose(file);
 }
 
@@ -82,6 +84,9 @@ void AtFinanceLoad(SLONG slot) {
                 gFinance[p].shortDue[c] = due;
             }
         }
+    }
+    if (ok) {
+        AtRivalLoad(file);
     }
     fclose(file);
     if (!ok) {

@@ -296,6 +296,7 @@ void AtQuestNewDay() {
         if (done >= goal) {
             const __int64 reward = QuestReward(quest, goal);
             qPlayer.ChangeMoney(reward, 3607, "");
+            gRival[Sim.localPlayer].questsDone++;
             qPlayer.Image = std::min<SLONG>(1000, qPlayer.Image + 15);
             qPlayer.Messages.AddMessage(BERATERTYP_GIRL,
                                         bprintf(AtText("Nebenauftrag erf\374llt! %s zahlt %s und empfiehlt uns weiter.", "Side job done! %s pays %s and recommends us."),

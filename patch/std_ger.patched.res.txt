@@ -363,6 +363,21 @@
 >>0003606
   D::Verlust aus Leerverkauf
   E::Loss from short sale
+>>0003608
+  D::Strafe des Kartellamts
+  E::Fine of the cartel office
+>>0003609
+  D::Nichtangriffspakt
+  E::Non-aggression pact
+>>0003610
+  D::Rabatt aus Sammeleinkauf
+  E::Discount from joint purchase
+>>0003611
+  D::Auftragsgeschäft mit Konkurrent
+  E::Order deal with a competitor
+>>0003612
+  D::Gerüchte
+  E::Rumours
 >>0003607
   D::Bonus für Nebenauftrag
   E::Bonus for side job
