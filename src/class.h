@@ -504,6 +504,7 @@ class /**/ CAuftrag {
     void RefillForAusland(SLONG AreaType, SLONG CityNum, TEAKRAND *pRandom);
 
     friend class CAuftraege;
+    friend CAuftrag AtRivalOfferedOrder(SLONG rival); // optional rules, GameRivals.cpp
 };
 
 class CAuftraege : public ALBUM_V<CAuftrag> {
