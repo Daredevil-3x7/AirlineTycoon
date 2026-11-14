@@ -66,6 +66,11 @@ command line; on by default only on Android). They do not apply to missions and 
   one; the worse the relationship, the nastier the jobs. They also strike back at the human
   player once they dislike them enough, at every difficulty level.
 
+- **Orders for older planes:** about 40 percent of the new orders fit the smallest plane of
+  the fleet, so older planes still find work after bigger ones were bought.
+- **Side jobs:** every five days somebody calls with a job for three days (carry passengers,
+  complete flights or accept orders; the goal follows from the days before). A finished job
+  pays a bonus and improves the image, a failed one costs nothing.
 - **Bank:** at the credit desk a fixed deposit (7 days, 2 percent) and a term loan (20 days,
   3 percent, counts against the credit limit); at the stock desk short sales against the other
   airlines (settled after 5 days or on request, the value of the shares has to be in the account).

@@ -614,6 +614,7 @@ void CFracht::Refill(SLONG AreaType, TEAKRAND *pRnd) {
     InPlan = 0;
     Okay = 1;
 
+    const bool atSmall = AtOrderForSmallPlane(pRandom);
 too_large:
     if (Sim.Difficulty == DIFF_ADDON03 && pRnd->Rand(100) > 25) {
         NachCity = Sim.KrisenCity;
@@ -722,7 +723,7 @@ too_large:
         Praemie *= 3;
     }
 
-    if ((Cities.CalcDistance(VonCity, NachCity) > PlayerMaxLength) && TimeOut++ < 100) {
+    if (AtOrderTooLarge(0, Cities.CalcDistance(VonCity, NachCity), atSmall) && TimeOut++ < 100) {
         goto too_large;
     }
 
@@ -993,6 +994,7 @@ void CFracht::RefillForAusland(SLONG AreaType, SLONG CityNum, TEAKRAND *pRandom)
         CityNum = Cities.GetIdFromIndex(CityNum);
     }
 
+    const bool atSmall = AtOrderForSmallPlane(pRandom);
 too_large:
     do {
         VonCity = Cities.GetIdFromIndex(Cities.GetRandomUsedIndex(pRandom));
@@ -1107,7 +1109,7 @@ too_large:
         Praemie *= 3;
     }
 
-    if ((Cities.CalcDistance(VonCity, NachCity) > PlayerMaxLength) && TimeOut++ < 100) {
+    if (AtOrderTooLarge(0, Cities.CalcDistance(VonCity, NachCity), atSmall) && TimeOut++ < 100) {
         goto too_large;
     }
 

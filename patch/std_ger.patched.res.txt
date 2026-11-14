@@ -363,6 +363,9 @@
 >>0003606
   D::Verlust aus Leerverkauf
   E::Loss from short sale
+>>0003607
+  D::Bonus für Nebenauftrag
+  E::Bonus for side job
 
 //
 // Akti

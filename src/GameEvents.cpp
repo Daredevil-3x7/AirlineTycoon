@@ -191,3 +191,142 @@ CString AtKerosinHeadline() {
     }
     return CString(bprintf(format, static_cast<long>(today)));
 }
+
+//============================================================================================
+// Side jobs in the free game. Every few days somebody calls the player with a job for the next
+// three days. Nothing has to be accepted and nothing is lost if it fails; a finished job pays
+// a bonus and improves the image.
+//
+// Like the events, the jobs are not stored: which job runs when follows from the start time of
+// the game, the goal from what the airline did in the days before, and the progress from the
+// statistics the game keeps anyway.
+//============================================================================================
+namespace {
+constexpr SLONG kQuestBlock = 5; // a new job every five days
+constexpr SLONG kQuestDays = 3;  // days to finish it
+
+struct ATQuest {
+    SLONG type{0};   // 0: passengers, 1: flights, 2: new orders
+    SLONG caller{0}; // who is calling
+    SLONG start{0};  // first day
+    SLONG end{0};    // last day
+    SLONG stat{STAT_PASSAGIERE};
+};
+
+ATQuest QuestOfBlock(SLONG block) {
+    ATQuest quest;
+    TEAKRAND rnd(static_cast<ULONG>(Sim.StartTime) + static_cast<ULONG>(block) * 104729U + 4711U);
+    rnd.Rand(100);
+    rnd.Rand(100);
+    quest.type = rnd.Rand(3);
+    quest.caller = rnd.Rand(4);
+    quest.start = block * kQuestBlock + 2 + rnd.Rand(2);
+    quest.end = quest.start + kQuestDays - 1;
+    quest.stat = (quest.type == 0) ? STAT_PASSAGIERE : (quest.type == 1) ? STAT_FLUEGE : STAT_AUFTRAEGE;
+    return quest;
+}
+
+// The total at the end of the given day. This runs at the start of day Sim.Date, before the
+// statistics get their entry for the new day.
+__int64 QuestTotal(PLAYER &qPlayer, SLONG stat, SLONG day) {
+    const SLONG back = Sim.Date - 1 - day;
+    if (back < 0 || day < 0) {
+        return 0;
+    }
+    return qPlayer.Statistiken[stat].GetAtPastDay(back);
+}
+
+__int64 QuestGoal(PLAYER &qPlayer, const ATQuest &quest) {
+    // what the airline did in the three days before the call, plus a third
+    const __int64 before = QuestTotal(qPlayer, quest.stat, quest.start - 1) - QuestTotal(qPlayer, quest.stat, quest.start - 4);
+    __int64 goal = std::max<__int64>(0, before) * 4 / 3;
+    if (quest.type == 0) {
+        goal = std::max<__int64>(250, (goal + 9) / 10 * 10);
+    } else if (quest.type == 1) {
+        goal = std::max<__int64>(6, goal + 1);
+    } else {
+        goal = std::max<__int64>(4, goal + 1);
+    }
+    return goal;
+}
+
+__int64 QuestReward(const ATQuest &quest, __int64 goal) {
+    const __int64 perUnit = (quest.type == 0) ? 150 : (quest.type == 1) ? 12000 : 10000;
+    return 40000 + goal * perUnit;
+}
+
+const char *QuestCaller(SLONG caller) {
+    switch (caller) {
+    case 0:
+        return AtText("Reiseb\374ro Fernweh", "the Wanderlust travel agency");
+    case 1:
+        return AtText("Ein Messeveranstalter", "A trade fair organiser");
+    case 2:
+        return AtText("Die Flughafenleitung", "The airport management");
+    default:
+        return AtText("Ein Reiseveranstalter", "A tour operator");
+    }
+}
+
+CString QuestTask(const ATQuest &quest, __int64 goal) {
+    const char *text = (quest.type == 0)   ? AtText("%li Passagiere bef\366rdern", "carry %li passengers")
+                       : (quest.type == 1) ? AtText("%li Fl\374ge durchf\374hren", "complete %li flights")
+                                           : AtText("%li neue Auftr\344ge annehmen", "accept %li new orders");
+    return bprintf(text, static_cast<long>(goal));
+}
+} // namespace
+
+void AtQuestNewDay() {
+    if (!AtExtrasActive() || Sim.localPlayer < 0 || Sim.localPlayer >= Sim.Players.Players.AnzEntries()) {
+        return;
+    }
+    PLAYER &qPlayer = Sim.Players.Players[Sim.localPlayer];
+    if (qPlayer.IsOut != 0) {
+        return;
+    }
+
+    // the job that ended yesterday
+    for (SLONG block = Sim.Date / kQuestBlock; block >= 0 && block >= Sim.Date / kQuestBlock - 1; block--) {
+        const ATQuest quest = QuestOfBlock(block);
+        if (quest.end + 1 != Sim.Date) {
+            continue;
+        }
+        const __int64 goal = QuestGoal(qPlayer, quest);
+        const __int64 done = QuestTotal(qPlayer, quest.stat, quest.end) - QuestTotal(qPlayer, quest.stat, quest.start - 1);
+        if (done >= goal) {
+            const __int64 reward = QuestReward(quest, goal);
+            qPlayer.ChangeMoney(reward, 3607, "");
+            qPlayer.Image = std::min<SLONG>(1000, qPlayer.Image + 15);
+            qPlayer.Messages.AddMessage(BERATERTYP_GIRL,
+                                        bprintf(AtText("Nebenauftrag erf\374llt! %s zahlt %s und empfiehlt uns weiter.", "Side job done! %s pays %s and recommends us."),
+                                                QuestCaller(quest.caller), (LPCTSTR)Insert1000erDots64(reward)),
+                                        MESSAGE_URGENT);
+        } else {
+            qPlayer.Messages.AddMessage(BERATERTYP_GIRL,
+                                        bprintf(AtText("Nebenauftrag nicht geschafft: %li von %li. Eine Strafe gibt es nicht.", "Side job not finished: %li of %li. There is no penalty."),
+                                                static_cast<long>(std::max<__int64>(0, done)), static_cast<long>(goal)),
+                                        MESSAGE_URGENT);
+        }
+    }
+
+    // a job that starts or runs today
+    const ATQuest quest = QuestOfBlock(Sim.Date / kQuestBlock);
+    if (Sim.Date < quest.start || Sim.Date > quest.end) {
+        return;
+    }
+    const __int64 goal = QuestGoal(qPlayer, quest);
+    if (Sim.Date == quest.start) {
+        qPlayer.Messages.AddMessage(BERATERTYP_GIRL,
+                                    bprintf(AtText("Anruf f\374r Sie: %s bietet einen Nebenauftrag. In %li Tagen %s - Bonus %s.", "A call for you: %s offers a side job. Within %li days %s - bonus %s."),
+                                            QuestCaller(quest.caller), static_cast<long>(kQuestDays), (LPCTSTR)QuestTask(quest, goal),
+                                            (LPCTSTR)Insert1000erDots64(QuestReward(quest, goal))),
+                                    MESSAGE_URGENT);
+    } else {
+        const __int64 done = QuestTotal(qPlayer, quest.stat, Sim.Date - 1) - QuestTotal(qPlayer, quest.stat, quest.start - 1);
+        qPlayer.Messages.AddMessage(BERATERTYP_GIRL,
+                                    bprintf(AtText("Nebenauftrag: %li von %li, noch %li Tage.", "Side job: %li of %li, %li days left."),
+                                            static_cast<long>(std::max<__int64>(0, done)), static_cast<long>(goal),
+                                            static_cast<long>(quest.end - Sim.Date + 1)),
+                                    MESSAGE_NORMAL);
+    }
+}

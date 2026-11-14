@@ -65,6 +65,31 @@ void CalcPlayerMaximums(bool bForce) {
     PlayerMinLength *= 1000;
 }
 
+//--------------------------------------------------------------------------------------------
+// Extra rules: a part of the new orders is made for the smallest plane of the fleet, so that
+// older planes still find work after bigger ones were bought.
+//--------------------------------------------------------------------------------------------
+bool AtOrderForSmallPlane(TEAKRAND *pRandom) {
+    if (!AtExtrasActive()) {
+        return false;
+    }
+    CalcPlayerMaximums();
+    if (PlayerMinLength <= 0 || (PlayerMinPassagiere >= PlayerMaxPassagiere && PlayerMinLength >= PlayerMaxLength)) {
+        return false; // all planes are alike
+    }
+    return pRandom->Rand(100) < 40;
+}
+
+bool AtOrderTooLarge(SLONG personen, SLONG distance, bool forSmallPlane) {
+    SLONG maxPersonen = PlayerMaxPassagiere;
+    SLONG maxLength = PlayerMaxLength;
+    if (forSmallPlane) {
+        maxPersonen = std::min(maxPersonen, std::max(PlayerMinPassagiere, SLONG(90)));
+        maxLength = std::min(maxLength, PlayerMinLength);
+    }
+    return personen > maxPersonen || distance > maxLength;
+}
+
 //============================================================================================
 // Läßt nötigenfalls den Auftragsberater mit einem Spruch erscheien
 //============================================================================================
@@ -289,6 +314,7 @@ void CAuftrag::RefillForLastMinute(SLONG AreaType, TEAKRAND *pRandom) {
     NetGenericSync(2000, AreaType);
     NetGenericSync(2001, pRandom->GetSeed());
 
+    const bool atSmall = AtOrderForSmallPlane(pRandom);
 too_large:
     RandomCities(AreaType, Sim.HomeAirportId, pRandom);
     AtEventAdjustOrderCities(VonCity, NachCity, pRandom);
@@ -371,7 +397,7 @@ too_large:
 
     Praemie = AtEventAdjustPremium(Praemie, VonCity, NachCity);
 
-    if ((SLONG(Personen) > PlayerMaxPassagiere || Cities.CalcDistance(VonCity, NachCity) > PlayerMaxLength) && TimeOut++ < 100) {
+    if (AtOrderTooLarge(SLONG(Personen), Cities.CalcDistance(VonCity, NachCity), atSmall) && TimeOut++ < 100) {
         goto too_large;
     }
 }
@@ -385,6 +411,7 @@ void CAuftrag::RefillForReisebuero(SLONG AreaType, TEAKRAND *pRandom) {
     NetGenericSync(3000, AreaType);
     NetGenericSync(3001, pRandom->GetSeed());
 
+    const bool atSmall = AtOrderForSmallPlane(pRandom);
 too_large:
     RandomCities(AreaType, Sim.HomeAirportId, pRandom);
     AtEventAdjustOrderCities(VonCity, NachCity, pRandom);
@@ -475,7 +502,7 @@ too_large:
 
     Praemie = AtEventAdjustPremium(Praemie, VonCity, NachCity);
 
-    if ((SLONG(Personen) > PlayerMaxPassagiere || Cities.CalcDistance(VonCity, NachCity) > PlayerMaxLength) && TimeOut++ < 100) {
+    if (AtOrderTooLarge(SLONG(Personen), Cities.CalcDistance(VonCity, NachCity), atSmall) && TimeOut++ < 100) {
         goto too_large;
     }
 }
@@ -567,6 +594,7 @@ void CAuftrag::RefillForUhrig(SLONG AreaType, TEAKRAND *pRandom) {
     NetGenericSync(5000, AreaType);
     NetGenericSync(5001, pRandom->GetSeed());
 
+    const bool atSmall = AtOrderForSmallPlane(pRandom);
 too_large:
     RandomCities(AreaType, Sim.HomeAirportId, pRandom);
 
@@ -655,7 +683,7 @@ too_large:
         Praemie = Praemie * 4 / 5;
     }
 
-    if ((SLONG(Personen) > PlayerMaxPassagiere || Cities.CalcDistance(VonCity, NachCity) > PlayerMaxLength) && TimeOut++ < 100) {
+    if (AtOrderTooLarge(SLONG(Personen), Cities.CalcDistance(VonCity, NachCity), atSmall) && TimeOut++ < 100) {
         goto too_large;
     }
 }
@@ -677,6 +705,7 @@ void CAuftrag::RefillForAusland(SLONG AreaType, SLONG CityNum, TEAKRAND *pRandom
         CityNum = Cities.GetIdFromIndex(CityNum);
     }
 
+    const bool atSmall = AtOrderForSmallPlane(pRandom);
 too_large:
 
     do {
@@ -780,7 +809,7 @@ too_large:
         Praemie = Praemie * 4 / 5;
     }
 
-    if ((SLONG(Personen) > PlayerMaxPassagiere || Cities.CalcDistance(VonCity, NachCity) > PlayerMaxLength) && TimeOut++ < 100) {
+    if (AtOrderTooLarge(SLONG(Personen), Cities.CalcDistance(VonCity, NachCity), atSmall) && TimeOut++ < 100) {
         goto too_large;
     }
 }

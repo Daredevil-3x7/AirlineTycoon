@@ -55,6 +55,9 @@ void AtEventAdjustOrderCities(ULONG &VonCity, ULONG &NachCity, TEAKRAND *pRandom
 SLONG AtEventAdjustPremium(SLONG Praemie, ULONG VonCity, ULONG NachCity);
 CString AtEventHeadline(const ATGameEvent &event, bool announcement);
 CString AtKerosinHeadline(void);
+bool AtOrderForSmallPlane(TEAKRAND *pRandom);
+bool AtOrderTooLarge(SLONG personen, SLONG distance, bool forSmallPlane);
+void AtQuestNewDay(void);
 
 const char *AtText(const char *german, const char *english);
 SLONG AtPlanerCarrying(void);
