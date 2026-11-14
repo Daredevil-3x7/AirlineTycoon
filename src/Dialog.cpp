@@ -3640,6 +3640,10 @@ BOOL CStdRaum::PreLButtonDown(CPoint point) {
                 // absichtlich kein break, sondern nächster Spieler:
                 [[fallthrough]];
 
+            case 5051:
+                MakeSayWindow(0, 5052, AtBriefing(1), pFontPartner);
+                break;
+
                 // Nächster Spieler:
             case 2040:
             case 2041:
@@ -3647,6 +3651,7 @@ BOOL CStdRaum::PreLButtonDown(CPoint point) {
             case 2043:
             case 2044:
             case 3002:
+            case 5052:
                 do {
                     DialogPar1++; // Nächster Spieler
                     DialogPar3++; // Nächster Eröffnungssatz
@@ -3655,6 +3660,10 @@ BOOL CStdRaum::PreLButtonDown(CPoint point) {
                 if (DialogPar1 < 4) {
                     goto _und_jetzt_weiter_mit_etc;
                     // MakeSayWindow (0, TOKEN_BOSS, 2010+DialogPar1, pFontPartner, Sim.Players.Players[DialogPar1].AirlineX);
+                } else if (AtExtrasActive() && DialogPar3 < 100) {
+                    // optional rules: the manager adds a briefing in two parts (5051, 5052)
+                    DialogPar3 = 100;
+                    MakeSayWindow(0, 5051, AtBriefing(0), pFontPartner);
                 } else {
                     MakeSayWindow(0, TOKEN_BOSS, 2102, pFontPartner);
 

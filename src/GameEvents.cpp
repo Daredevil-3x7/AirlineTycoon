@@ -381,3 +381,133 @@ void AtImageNewDay() {
 CString AtImageHelp() {
     return AtText("Das Image reicht von -1000 bis 1000. Es steigt durch Werbekampagnen, durch zufriedene Passagiere (langsam und je nach Quote nur bis h\366chstens 500), gutes Personal an Bord und erf\374llte Nebenauftr\344ge. Es sinkt durch unzufriedene Passagiere, zu hohe Ticketpreise, Pannen und Sabotage.", "The image ranges from -1000 to 1000. It rises with advertising campaigns, satisfied passengers (slowly, and depending on the share only up to 500 at most), good staff on board and finished side jobs. It falls with unhappy passengers, overpriced tickets, breakdowns and sabotage.");
 }
+
+//============================================================================================
+// The morning meeting in the free game: after his remarks about each airline the manager adds
+// a short briefing in two parts - how the airlines stand, and what the day brings.
+//============================================================================================
+namespace {
+const char *BriefingJoke(SLONG number) {
+    switch (number) {
+    case 0:
+        return AtText("Und denken Sie daran: Ein Flugzeug am Boden verdient nur Staub.", "And remember: a plane on the ground earns nothing but dust.");
+    case 1:
+        return AtText("Die Kaffeemaschine hier ist \374brigens zuverl\344ssiger als mancher Flugplan in diesem Raum.", "By the way, the coffee machine here is more reliable than some flight plans in this room.");
+    case 2:
+        return AtText("Ich habe heute Nacht von p\374nktlichen Fl\374gen getr\344umt. Dann bin ich aufgewacht.", "Last night I dreamt of punctual flights. Then I woke up.");
+    case 3:
+        return AtText("Wer Gep\344ck verliert, findet selten Kunden wieder.", "Those who lose luggage rarely find customers again.");
+    case 4:
+        return AtText("Sabotage ist kein Gesch\344ftsmodell. Meistens.", "Sabotage is not a business model. Mostly.");
+    case 5:
+        return AtText("Falls jemand meinen Parkplatz gesehen hat: Dort stand gestern ein Gep\344ckwagen.", "If anyone has seen my parking space: there was a luggage cart on it yesterday.");
+    case 6:
+        return AtText("Die gute Nachricht zum Schluss: Die Startbahn ist noch da.", "The good news to finish: the runway is still there.");
+    case 7:
+        return AtText("Bitte keine Verhandlungen mehr auf der Toilette. Die Putzkolonne hat sich beschwert.", "No more negotiations in the toilets, please. The cleaners have complained.");
+    case 8:
+        return AtText("Der Duty-Free-Laden meldet Rekordumsatz bei Pralinen. Ich frage lieber nicht, wer hier wen besticht.", "The duty free shop reports record sales of chocolates. I would rather not ask who is bribing whom.");
+    case 9:
+        return AtText("Wenn Sie schon Schulden machen, dann bitte mit Stil.", "If you must run up debts, please do it with style.");
+    case 10:
+        return AtText("Ein Tipp vom alten Hasen: Kerosin kauft man, wenn es keiner will.", "A tip from an old hand: buy kerosene when nobody wants it.");
+    default:
+        return AtText("Und jetzt raus mit Ihnen, die Passagiere fliegen sich nicht von selbst.", "Now off you go, the passengers will not fly themselves.");
+    }
+}
+} // namespace
+
+CString AtBriefing(SLONG part) {
+    CString text;
+    const SLONG me = Sim.localPlayer;
+    if (me < 0 || me >= Sim.Players.Players.AnzEntries()) {
+        return BriefingJoke(0);
+    }
+    PLAYER &qPlayer = Sim.Players.Players[me];
+    const CString space = " ";
+
+    if (part == 0) {
+        // the statistics already have their entry for today: 1 = end of yesterday, 2 = the day before
+        SLONG leader = -1;
+        SLONG busiest = -1;
+        SLONG grumpy = -1;
+        SLONG rank = 1;
+        SLONG active = 0;
+        __int64 busiestCount = 0;
+        const __int64 myValue = qPlayer.Statistiken[STAT_FIRMENWERT].GetAtPastDay(1);
+        for (SLONG c = 0; c < Sim.Players.Players.AnzEntries() && c < 4; c++) {
+            PLAYER &qOther = Sim.Players.Players[c];
+            if (qOther.IsOut != 0) {
+                continue;
+            }
+            active++;
+            const __int64 value = qOther.Statistiken[STAT_FIRMENWERT].GetAtPastDay(1);
+            if (leader == -1 || value > Sim.Players.Players[leader].Statistiken[STAT_FIRMENWERT].GetAtPastDay(1)) {
+                leader = c;
+            }
+            if (c != me && value > myValue) {
+                rank++;
+            }
+            const __int64 count = qOther.Statistiken[STAT_PASSAGIERE].GetAtPastDay(1) - qOther.Statistiken[STAT_PASSAGIERE].GetAtPastDay(2);
+            if (count > busiestCount) {
+                busiestCount = count;
+                busiest = c;
+            }
+            if (c != me && qOther.Owner == 1 && qOther.Sympathie[me] < -40 && (grumpy == -1 || qOther.Sympathie[me] < Sim.Players.Players[grumpy].Sympathie[me])) {
+                grumpy = c;
+            }
+        }
+
+        text = bprintf(AtText("Kurz zur Lage an Tag %li.", "A quick look at day %li."), static_cast<long>(Sim.Date + 1)) + space;
+        if (leader == me) {
+            text += CString(AtText("Beim Firmenwert liegen Sie vorn. Genie\337en Sie es, die anderen s\344gen schon an Ihrem Stuhl.", "You lead in company value. Enjoy it, the others are already sawing at your chair.")) + space;
+        } else if (leader != -1) {
+            text += bprintf(AtText("Beim Firmenwert f\374hrt %s mit %s.", "%s leads in company value with %s."), (LPCTSTR)Sim.Players.Players[leader].AirlineX,
+                            (LPCTSTR)Insert1000erDots64(Sim.Players.Players[leader].Statistiken[STAT_FIRMENWERT].GetAtPastDay(1))) + space;
+            if (rank >= active && active > 1) {
+                text += CString(AtText("Sie sind Letzter. Von dort hat man immerhin die beste Aussicht auf alle anderen.", "You are last. At least that gives you the best view of everybody else.")) + space;
+            } else {
+                text += bprintf(AtText("Sie liegen auf Platz %li - Luft nach oben ist reichlich vorhanden.", "You are in place %li - there is plenty of room above you."),
+                                static_cast<long>(rank)) + space;
+            }
+        }
+        if (busiest != -1) {
+            text += bprintf(AtText("Die meisten Passagiere hatte gestern %s: %li.", "%s carried the most passengers yesterday: %li."),
+                            (LPCTSTR)Sim.Players.Players[busiest].AirlineX, static_cast<long>(busiestCount)) + space;
+        } else {
+            text += CString(AtText("Passagiere hat gestern niemand bef\366rdert. Das hier ist ein Flughafen, kein Museum!", "Nobody carried any passengers yesterday. This is an airport, not a museum!")) + space;
+        }
+        if (grumpy != -1) {
+            text += bprintf(AtText("Und unter uns: %s ist auf Sie gar nicht gut zu sprechen.", "And between us: %s is not at all pleased with you."),
+                            (LPCTSTR)Sim.Players.Players[grumpy].AirlineX);
+        }
+        return text;
+    }
+
+    // what the day brings
+    ATGameEvent event;
+    if (AtEventOnDay(Sim.Date, event)) {
+        text += AtEventHeadline(event, false) + space;
+    } else if (AtEventStartingOn(Sim.Date + 1, event)) {
+        text += AtEventHeadline(event, true) + space;
+    }
+    const SLONG before = Sim.KerosinPast[8];
+    if (Sim.Kerosin > before + 5) {
+        text += bprintf(AtText("Kerosin ist teurer geworden: %li statt %li. Wer volle Tanks hat, darf jetzt l\344cheln.", "Kerosene has become dearer: %li instead of %li. Those with full tanks may smile now."),
+                        static_cast<long>(Sim.Kerosin), static_cast<long>(before)) + space;
+    } else if (Sim.Kerosin < before - 5) {
+        text += bprintf(AtText("Kerosin ist billiger geworden: %li statt %li. Ein guter Tag zum Tanken.", "Kerosene has become cheaper: %li instead of %li. A good day to fill the tanks."),
+                        static_cast<long>(Sim.Kerosin), static_cast<long>(before)) + space;
+    } else {
+        text += bprintf(AtText("Kerosin kostet unver\344ndert rund %li.", "Kerosene still costs about %li."), static_cast<long>(Sim.Kerosin)) + space;
+    }
+    const SLONG due = qPlayer.Auftraege.GetNumDueToday();
+    if (due > 0) {
+        text += bprintf(AtText("Bei Ihnen sind heute %li Auftr\344ge f\344llig - ich w\374rde sie nicht vergessen.", "You have %li orders due today - I would not forget them."),
+                        static_cast<long>(due)) + space;
+    }
+    TEAKRAND rnd(static_cast<ULONG>(Sim.StartTime) + static_cast<ULONG>(Sim.Date) * 2713U + 9U);
+    rnd.Rand(100);
+    text += BriefingJoke(rnd.Rand(12));
+    return text;
+}

@@ -97,6 +97,7 @@ CString AtRivalDealSmear(PLAYER &qPlayer, SLONG rival, SLONG target, bool &ok);
 CString AtStatCalcLabel(SLONG code);
 CString AtStatCalc(SLONG player, SLONG viewer, SLONG code);
 void AtImageNewDay(void);
+CString AtBriefing(SLONG part);
 CString AtImageHelp(void);
 
 const char *AtText(const char *german, const char *english);

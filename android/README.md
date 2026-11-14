@@ -85,6 +85,10 @@ command line; on by default only on Android). They do not apply to missions and 
 - **More statistics:** the third page lists income per flight and per plane, passengers per
   flight, share of satisfied passengers, market share, finished side jobs and the bank balance
   of fixed deposit and term loan.
+- **Morning meeting:** after his remarks about each airline the manager adds a briefing: who
+  leads in company value and where the player stands, who carried the most passengers, who is
+  angry with the player, the event of the day, the kerosene price, orders due today - and a
+  remark of his own.
 - **Bank:** at the credit desk a fixed deposit (7 days, 2 percent) and a term loan (20 days,
   3 percent, counts against the credit limit); at the stock desk short sales against the other
   airlines (settled after 5 days or on request, the value of the shares has to be in the account).
