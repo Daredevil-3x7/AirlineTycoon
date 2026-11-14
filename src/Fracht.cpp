@@ -614,7 +614,7 @@ void CFracht::Refill(SLONG AreaType, TEAKRAND *pRnd) {
     InPlan = 0;
     Okay = 1;
 
-    const bool atSmall = AtOrderForSmallPlane(pRandom);
+    const bool atSmall = AtOrderForSmallPlane(pRnd);
 too_large:
     if (Sim.Difficulty == DIFF_ADDON03 && pRnd->Rand(100) > 25) {
         NachCity = Sim.KrisenCity;
